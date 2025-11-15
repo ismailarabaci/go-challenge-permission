@@ -3,7 +3,7 @@ package server
 import "context"
 
 // enforce interface compliance
-var _ Stage5 = New()
+var _ Stage5 = (*Server)(nil)
 
 /*
 	The challenge is divided into stages, one for each of the interfaces below.
