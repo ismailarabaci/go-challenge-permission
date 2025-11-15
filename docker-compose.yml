@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: blp-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: my-secret-pw
+      MYSQL_DATABASE: blp-coding-challenge
+      MYSQL_USER: blp
+      MYSQL_PASSWORD: password
+    volumes:
+      - ./db/initdb:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ublp", "-ppassword"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+
