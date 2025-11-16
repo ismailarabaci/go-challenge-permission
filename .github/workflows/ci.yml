@@ -74,7 +74,7 @@ jobs:
         MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/testdb?parseTime=true"
 
     - name: Upload unit test coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         file: ./coverage-unit.txt
         flags: unit
@@ -147,7 +147,7 @@ jobs:
         MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/testdb?parseTime=true"
 
     - name: Upload integration test coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         file: ./coverage-integration.txt
         flags: integration
