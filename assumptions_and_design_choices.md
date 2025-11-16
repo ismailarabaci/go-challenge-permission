@@ -352,3 +352,101 @@ All 32 tests passing (24 unit tests + 2 integration tests with 11 subtests)
 - All scenarios covered: user operations, groups, hierarchies, transitive membership, permissions
 - Integration tests validate full HTTP request/response cycle
 
+---
+
+## Continuous Integration (CI) Pipeline
+
+### Decision: GitHub Actions for Automated Testing
+
+The project uses GitHub Actions for continuous integration to ensure code quality and catch issues early.
+
+### CI Configuration
+
+**Workflow File:** `.github/workflows/ci.yml`
+
+**Jobs:**
+1. **Test Job** - Runs on every push/PR
+   - Tests against Go 1.21, 1.22, 1.23 (matrix strategy)
+   - Spins up MySQL 8.0 service container
+   - Runs full test suite with race detector
+   - Generates coverage report
+   - Uploads to Codecov
+
+2. **Lint Job** - Code quality checks
+   - Runs golangci-lint with custom configuration
+   - Checks for common issues, bugs, and style violations
+   - Configuration in `.golangci.yml`
+
+3. **Format Job** - Code style enforcement
+   - Verifies consistent formatting with `gofmt`
+   - Runs `go vet` for suspicious constructs
+
+### Features
+
+**Multi-Version Testing**
+- Ensures compatibility across Go versions
+- Matrix strategy runs tests in parallel
+- Catches version-specific issues early
+
+**Service Containers**
+- MySQL 8.0 runs as a service
+- Health checks ensure database readiness
+- Mirrors production environment
+
+**Caching**
+- Go module cache speeds up builds
+- Build cache reduces compilation time
+- Typical CI run: ~2-3 minutes
+
+**Dependency Management**
+- Dependabot configured for weekly updates
+- Automated security patches
+- Keeps dependencies current
+
+### Linting Configuration
+
+**Enabled Linters:**
+- `errcheck`: Unchecked errors
+- `gosec`: Security issues
+- `govet`: Suspicious constructs
+- `staticcheck`: Advanced static analysis
+- `gofmt` / `goimports`: Formatting
+- `ineffassign`: Ineffective assignments
+- `dupl`: Code duplication
+- And more (see `.golangci.yml`)
+
+**Test Exemptions:**
+- Duplication allowed in test files
+- Security checks relaxed for tests
+- Focus on production code quality
+
+### Coverage Reporting
+
+- Coverage uploaded to Codecov
+- Badge displayed in README
+- Tracks coverage trends over time
+- Helps identify untested code paths
+
+### Rationale
+
+**Why GitHub Actions?**
+- ✅ Native GitHub integration
+- ✅ Free for public repositories
+- ✅ Easy service containers (MySQL)
+- ✅ Matrix builds for multi-version testing
+- ✅ Extensive marketplace of actions
+
+**Benefits:**
+1. **Early Detection**: Catches issues before merge
+2. **Quality Assurance**: Automated checks prevent regressions
+3. **Confidence**: Green CI gives confidence to merge
+4. **Documentation**: CI config documents build/test process
+5. **Visibility**: Badges show project health at a glance
+
+**CI Best Practices Applied:**
+- Fast feedback (parallel jobs)
+- Comprehensive testing (unit + integration)
+- Realistic environment (MySQL service)
+- Security scanning (gosec)
+- Dependency updates (Dependabot)
+
