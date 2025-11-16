@@ -177,13 +177,15 @@ go test ./pkg/server/... -v -race
 This project uses GitHub Actions for continuous integration:
 
 - **Automated Testing**: Tests run on every push and pull request
+- **Separate Test Jobs**: Unit tests and integration tests run in parallel
 - **MySQL Integration**: Runs with MySQL 8.0 service container
 - **Code Quality**: Automated linting with golangci-lint
 - **Format Checking**: Ensures consistent code formatting with gofmt
-- **Coverage Reporting**: Uploads coverage to Codecov
+- **Coverage Reporting**: Separate coverage tracking for unit and integration tests
 
-The CI pipeline includes three jobs:
-- **Test**: Runs full test suite with race detector and coverage
+The CI pipeline includes four jobs:
+- **Unit Tests**: Runs 24 stage-based unit tests with race detector and coverage
+- **Integration Tests**: Runs 2 end-to-end HTTP scenarios with race detector and coverage
 - **Lint**: Runs golangci-lint with comprehensive linter configuration
 - **Format**: Checks code formatting and runs go vet
 

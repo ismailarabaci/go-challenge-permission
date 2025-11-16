@@ -7,8 +7,8 @@ on:
     branches: [ master, main ]
 
 jobs:
-  test:
-    name: Test
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
     
     services:
@@ -68,15 +68,89 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Run tests
-      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+    - name: Run unit tests
+      run: go test -v -race -coverprofile=coverage-unit.txt -covermode=atomic -run "Test_Stage" ./pkg/server/...
       env:
         MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/testdb?parseTime=true"
 
-    - name: Upload coverage to Codecov
+    - name: Upload unit test coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
-        file: ./coverage.txt
+        file: ./coverage-unit.txt
+        flags: unit
+        fail_ci_if_error: false
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testdb
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.20'
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/go/pkg/mod
+          ~/.cache/go-build
+        key: ${{ runner.os }}-go-1.20-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-1.20-
+
+    - name: Wait for MySQL to be ready
+      run: |
+        for i in {1..30}; do
+          if mysqladmin ping -h"127.0.0.1" -P3306 -uroot -proot --silent; then
+            echo "MySQL is ready!"
+            break
+          fi
+          echo "Waiting for MySQL... ($i/30)"
+          sleep 2
+        done
+
+    - name: Initialize database
+      run: |
+        mysql -h127.0.0.1 -P3306 -uroot -proot testdb < db/initdb/db.sql
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Run integration tests
+      run: go test -v -race -coverprofile=coverage-integration.txt -covermode=atomic -run "Test_Integration" ./pkg/server/...
+      env:
+        MYSQL_DSN: "root:root@tcp(127.0.0.1:3306)/testdb?parseTime=true"
+
+    - name: Upload integration test coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage-integration.txt
+        flags: integration
         fail_ci_if_error: false
 
   lint:
