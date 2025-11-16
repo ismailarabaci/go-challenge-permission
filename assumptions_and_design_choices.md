@@ -220,6 +220,255 @@ The single-package structure is the appropriate choice for this coding challenge
 
 ---
 
+## Constructor Pattern: Enforcing Pure Dependency Injection
+
+### Decision
+The `Server` constructor enforces **pure dependency injection** with no convenience constructors that hide dependency creation.
+
+### Current API
+
+```go
+// Only constructor - requires explicit dependencies
+func New(repo Repository) *Server
+
+// Factory functions for creating dependencies
+func OpenDatabase(config Config) (*sql.DB, error)
+func NewMySQLRepository(db *sql.DB) *MySQLRepository
+```
+
+### Usage Pattern
+
+```go
+// All dependencies must be explicitly created
+config := server.DefaultConfig()
+db, err := server.OpenDatabase(config)
+if err != nil {
+    return err
+}
+repo := server.NewMySQLRepository(db)
+srv := server.New(repo)
+defer srv.Close()
+```
+
+### Rationale
+
+#### Explicit Over Implicit
+
+**Design Philosophy:**
+- Dependencies are always visible at the construction site
+- No hidden resource allocation or side effects
+- Clear dependency graph makes reasoning about the code easier
+- Forces developers to think about their dependencies
+
+**Code Clarity:**
+```go
+// ✅ GOOD: Dependencies are explicit
+db, _ := server.OpenDatabase(config)
+repo := server.NewMySQLRepository(db)
+srv := server.New(repo)
+
+// ❌ AVOIDED: Hidden dependency creation
+srv, _ := server.NewDefault()  // What does this create? Database? Connections?
+```
+
+#### Testability First
+
+**Benefits for Testing:**
+- Mock injection is straightforward and obvious
+- No need to work around convenience constructors
+- Test setup is explicit about what it's creating
+- Easy to test with different repository implementations
+
+**Example:**
+```go
+// Production
+realRepo := server.NewMySQLRepository(db)
+srv := server.New(realRepo)
+
+// Testing
+mockRepo := &MockRepository{}
+srv := server.New(mockRepo)
+```
+
+#### Inversion of Control
+
+**Principles Applied:**
+1. **Dependency Inversion Principle**: High-level module (Server) depends on abstraction (Repository interface)
+2. **Single Responsibility**: Server constructs business logic, not dependencies
+3. **Open/Closed Principle**: Open for extension (new repository types) without modifying Server
+
+**Dependency Flow:**
+```
+Caller creates:     Config → Database → Repository
+Caller injects:     Repository → Server
+Server uses:        Repository interface (abstraction)
+```
+
+#### Production-Ready Design
+
+**Real-World Considerations:**
+- Production code often needs custom configuration
+- Database connections may come from connection pools
+- Different environments may use different repository implementations
+- Microservices may receive dependencies via dependency injection frameworks
+
+**Flexibility Examples:**
+```go
+// Production with custom config
+config := server.Config{
+    DatabaseDSN: os.Getenv("DB_DSN"),
+    MaxOpenConns: 100,
+    MaxIdleConns: 10,
+}
+db, _ := server.OpenDatabase(config)
+repo := server.NewMySQLRepository(db)
+srv := server.New(repo)
+
+// Testing with mock
+mockRepo := &TestRepository{}
+srv := server.New(mockRepo)
+
+// Different storage backend
+redisRepo := &RedisRepository{}
+srv := server.New(redisRepo)
+```
+
+### Alternatives Rejected
+
+#### Option 1: Convenience Constructor
+```go
+func New() (*Server, error) {
+    // Hidden: creates database, repository
+    config := DefaultConfig()
+    db, _ := OpenDatabase(config)
+    repo := NewMySQLRepository(db)
+    return &Server{repo: repo}, nil
+}
+```
+
+**Rejected because:**
+- ❌ Hides dependency creation
+- ❌ Makes testing harder (must work around it)
+- ❌ Reduces flexibility (harder to customize)
+- ❌ Obscures resource allocation
+- ❌ Creates tight coupling to MySQL
+
+#### Option 2: Multiple Constructors
+```go
+func New(repo Repository) *Server              // DI version
+func NewDefault() (*Server, error)              // Convenience version
+func NewWithConfig(config Config) (*Server, error)  // Config version
+```
+
+**Rejected because:**
+- ❌ Confusing API (which one to use?)
+- ❌ Invites use of convenience over best practices
+- ❌ More surface area to maintain
+- ❌ Tests might use different constructors inconsistently
+- ❌ Documentation becomes complex
+
+#### Option 3: Builder Pattern
+```go
+server.NewBuilder().
+    WithDatabase(db).
+    WithRepository(repo).
+    Build()
+```
+
+**Rejected because:**
+- ❌ Over-engineering for this use case
+- ❌ More verbose than simple function
+- ❌ No significant benefit over direct injection
+- ❌ Not idiomatic for Go
+
+### Design Trade-offs
+
+#### Advantages of Pure DI (Current Choice)
+✅ **Explicit dependencies** - Always visible  
+✅ **Maximum testability** - Easy mocking  
+✅ **Flexibility** - Any repository implementation  
+✅ **No hidden side effects** - Clear resource allocation  
+✅ **Production-ready** - Supports custom configuration  
+✅ **Simplest API** - Single constructor, easy to understand  
+✅ **Forces good practices** - Can't hide behind convenience  
+
+#### Disadvantages Accepted
+⚠️ **More verbose** - 4 lines instead of 1 for setup  
+⚠️ **Requires understanding** - Developer must know the dependency chain  
+⚠️ **No "quick start"** - Can't just call `New()` with no args  
+
+**Mitigation:**
+- Clear documentation with examples
+- Helper functions (like `setupTestServer` in tests) encapsulate the pattern
+- Factory functions (`OpenDatabase`, `NewMySQLRepository`) simplify steps
+- The verbosity is intentional - it's self-documenting code
+
+### Consistency with Go Idioms
+
+**Standard Library Examples:**
+```go
+// net/http - explicit listener injection
+listener, _ := net.Listen("tcp", ":8080")
+http.Serve(listener, handler)
+
+// database/sql - explicit driver and DSN
+db, _ := sql.Open("mysql", dsn)
+
+// os - explicit file descriptors
+file, _ := os.Open("/path/to/file")
+```
+
+Go's standard library consistently prefers explicit dependency management over convenience constructors that hide resource creation.
+
+### When to Reconsider
+
+Consider adding convenience constructors if:
+- 📦 This becomes a library with 1000+ external users demanding simplicity
+- 📦 The dependency chain grows beyond 5-6 steps
+- 📦 User feedback strongly indicates the explicit pattern is a barrier
+- 📦 Production telemetry shows developers frequently misconfigure dependencies
+
+**Current Verdict:** The explicit pattern is appropriate and should be maintained.
+
+### Implementation Notes
+
+**Factory Functions Provided:**
+- `OpenDatabase(config Config) (*sql.DB, error)` - Creates configured DB connection
+- `NewMySQLRepository(db *sql.DB) *MySQLRepository` - Creates repository
+- `DefaultConfig() Config` - Provides sensible defaults
+
+**These are building blocks, not convenience shortcuts.** Each has a single responsibility and returns its resource for the caller to manage.
+
+### Testing Pattern
+
+All tests follow the explicit pattern:
+
+```go
+func setupTestServer(t *testing.T) *Server {
+    t.Helper()
+    
+    // Explicit dependency creation - no hidden magic
+    config := DefaultConfig()
+    db, err := OpenDatabase(config)
+    if err != nil {
+        t.Fatalf("Failed to open database: %v", err)
+    }
+    
+    repo := NewMySQLRepository(db)
+    return New(repo)
+}
+```
+
+This test helper serves as both:
+1. A reusable setup function for tests
+2. Documentation of the recommended construction pattern
+
+### Conclusion
+
+Enforcing pure dependency injection through a single `New(repo Repository)` constructor is the right choice for this codebase. It prioritizes explicitness, testability, and flexibility over convenience. The pattern aligns with Go idioms, supports production use cases, and makes the dependency graph transparent. While it requires more lines of code at construction sites, this verbosity is intentional and serves as self-documenting code that makes dependencies visible and manageable.
+
+---
+
 ## Test Structure and Organization
 
 ### Decision: Granular Unit Tests with Table-Driven Patterns

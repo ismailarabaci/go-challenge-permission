@@ -5,14 +5,19 @@ import (
 	"testing"
 )
 
-// Test helper to create a test server
+// Test helper to create a test server with explicit dependency injection
 func setupTestServer(t *testing.T) *Server {
 	t.Helper()
-	s, err := New()
+
+	// Explicit dependency creation - no hidden magic
+	config := DefaultConfig()
+	db, err := OpenDatabase(config)
 	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
+		t.Fatalf("Failed to open database: %v", err)
 	}
-	return s
+
+	repo := NewMySQLRepository(db)
+	return New(repo)
 }
 
 // Stage 1 Tests - User Operations

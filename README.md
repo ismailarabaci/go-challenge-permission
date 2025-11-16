@@ -75,11 +75,14 @@ import (
 )
 
 func main() {
-    // Create server instance
-    srv, err := server.New()
+    // Create server with explicit dependency injection
+    config := server.DefaultConfig()
+    db, err := server.OpenDatabase(config)
     if err != nil {
         panic(err)
     }
+    repo := server.NewMySQLRepository(db)
+    srv := server.New(repo)
     defer srv.Close()
     
     ctx := context.Background()

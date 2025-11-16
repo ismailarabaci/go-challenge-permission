@@ -13,15 +13,33 @@ type Server struct {
 	repo Repository
 }
 
-// New creates a new Server with the default configuration
-// Returns an error instead of panicking for better error handling
-func New() (*Server, error) {
-	config := DefaultConfig()
-	return NewWithConfig(config)
+// New creates a new Server with the given repository.
+// This constructor enforces Dependency Injection - all dependencies must be
+// explicitly provided by the caller. This design choice ensures:
+//   - Full control over dependencies (database, repository implementation)
+//   - Easy testing with mock repositories
+//   - Clear dependency graph
+//   - No hidden side effects or internal resource creation
+//
+// Example usage:
+//
+//	config := server.DefaultConfig()
+//	db, err := server.OpenDatabase(config)
+//	if err != nil {
+//	    return err
+//	}
+//	repo := server.NewMySQLRepository(db)
+//	srv := server.New(repo)
+//	defer srv.Close()
+func New(repo Repository) *Server {
+	return &Server{repo: repo}
 }
 
-// NewWithConfig creates a new Server with the given configuration
-func NewWithConfig(config Config) (*Server, error) {
+// OpenDatabase creates and configures a database connection based on the provided config.
+// This is a factory function that handles all database connection setup.
+// It follows the Single Responsibility Principle by separating connection creation
+// from Server construction.
+func OpenDatabase(config Config) (*sql.DB, error) {
 	db, err := sql.Open("mysql", config.DatabaseDSN)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -38,14 +56,7 @@ func NewWithConfig(config Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	repo := NewMySQLRepository(db)
-	return NewWithRepository(repo), nil
-}
-
-// NewWithRepository creates a new Server with the given repository
-// This is useful for testing with mock repositories
-func NewWithRepository(repo Repository) *Server {
-	return &Server{repo: repo}
+	return db, nil
 }
 
 // Close closes the server and releases resources
