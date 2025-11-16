@@ -224,7 +224,7 @@ func NewMySQLRepository(db *sql.DB) *MySQLRepository {
 // Helper methods to reduce repetition
 
 // execInsert executes an insert query and returns the last insert ID
-func (r *MySQLRepository) execInsert(ctx context.Context, query string, errorMsg string, args ...interface{}) (int, error) {
+func (r *MySQLRepository) execInsert(ctx context.Context, query, errorMsg string, args ...interface{}) (int, error) {
 	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", errorMsg, err)
@@ -252,7 +252,7 @@ func (r *MySQLRepository) queryString(ctx context.Context, query string, notFoun
 }
 
 // queryIDs queries a list of integer IDs
-func (r *MySQLRepository) queryIDs(ctx context.Context, query string, errorMsg string, args ...interface{}) ([]int, error) {
+func (r *MySQLRepository) queryIDs(ctx context.Context, query, errorMsg string, args ...interface{}) ([]int, error) {
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", errorMsg, err)
@@ -276,7 +276,7 @@ func (r *MySQLRepository) queryIDs(ctx context.Context, query string, errorMsg s
 }
 
 // queryExists checks if a query returns any rows
-func (r *MySQLRepository) queryExists(ctx context.Context, query string, errorMsg string, args ...interface{}) (bool, error) {
+func (r *MySQLRepository) queryExists(ctx context.Context, query, errorMsg string, args ...interface{}) (bool, error) {
 	var exists int
 	err := r.db.QueryRowContext(ctx, query, args...).Scan(&exists)
 	if errors.Is(err, sql.ErrNoRows) {

@@ -170,20 +170,20 @@ func Test_Stage2_AddUserToGroup(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		userNames []string
 		groupName string
+		userNames []string
 		wantCount int
 	}{
 		{
 			name:      "add single user",
-			userNames: []string{"Alice"},
 			groupName: "Group1",
+			userNames: []string{"Alice"},
 			wantCount: 1,
 		},
 		{
 			name:      "add multiple users",
-			userNames: []string{"Bob", "Charlie", "Diana"},
 			groupName: "Group2",
+			userNames: []string{"Bob", "Charlie", "Diana"},
 			wantCount: 3,
 		},
 		{
@@ -204,14 +204,14 @@ func Test_Stage2_AddUserToGroup(t *testing.T) {
 
 			// Create and add users
 			for _, userName := range tt.userNames {
-				userID, err := s.CreateUser(ctx, userName)
-				if err != nil {
-					t.Fatalf("CreateUser failed: %v", err)
+				uid, createErr := s.CreateUser(ctx, userName)
+				if createErr != nil {
+					t.Fatalf("CreateUser failed: %v", createErr)
 				}
 
-				err = s.AddUserToGroup(ctx, userID, groupID)
-				if err != nil {
-					t.Fatalf("AddUserToGroup failed: %v", err)
+				addErr := s.AddUserToGroup(ctx, uid, groupID)
+				if addErr != nil {
+					t.Fatalf("AddUserToGroup failed: %v", addErr)
 				}
 			}
 
@@ -289,8 +289,12 @@ func Test_Stage2_GetUsersInGroup_Membership(t *testing.T) {
 
 	// Create group and add only user1 and user2
 	groupID, _ := s.CreateUserGroup(ctx, "TestGroup")
-	s.AddUserToGroup(ctx, user1, groupID)
-	s.AddUserToGroup(ctx, user2, groupID)
+	if err := s.AddUserToGroup(ctx, user1, groupID); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
+	if err := s.AddUserToGroup(ctx, user2, groupID); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
 
 	// Get users in group
 	users, err := s.GetUsersInGroup(ctx, groupID)
@@ -361,14 +365,14 @@ func Test_Stage3_AddGroupToGroup(t *testing.T) {
 
 			// Create and add child groups
 			for _, childName := range tt.children {
-				childID, err := s.CreateUserGroup(ctx, childName)
-				if err != nil {
-					t.Fatalf("CreateUserGroup failed: %v", err)
+				cid, createErr := s.CreateUserGroup(ctx, childName)
+				if createErr != nil {
+					t.Fatalf("CreateUserGroup failed: %v", createErr)
 				}
 
-				err = s.AddUserGroupToGroup(ctx, childID, parentID)
-				if err != nil {
-					t.Fatalf("AddUserGroupToGroup failed: %v", err)
+				addErr := s.AddUserGroupToGroup(ctx, cid, parentID)
+				if addErr != nil {
+					t.Fatalf("AddUserGroupToGroup failed: %v", addErr)
 				}
 			}
 
@@ -428,30 +432,36 @@ func Test_Stage3_CycleDetection_IndirectCycle(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		description string
 		setup       func() (int, int) // Returns childID, parentID that would create cycle
+		description string
 	}{
 		{
-			name:        "two-level cycle",
-			description: "A->B, then B->A",
+			name: "two-level cycle",
 			setup: func() (int, int) {
 				a, _ := s.CreateUserGroup(ctx, "GroupA")
 				b, _ := s.CreateUserGroup(ctx, "GroupB")
-				s.AddUserGroupToGroup(ctx, b, a) // A contains B
-				return a, b                      // Try to add A to B (creates cycle)
+				if err := s.AddUserGroupToGroup(ctx, b, a); err != nil {
+					t.Fatalf("AddUserGroupToGroup failed: %v", err)
+				}
+				return a, b // Try to add A to B (creates cycle)
 			},
+			description: "A->B, then B->A",
 		},
 		{
-			name:        "three-level cycle",
-			description: "A->B->C, then C->A",
+			name: "three-level cycle",
 			setup: func() (int, int) {
 				a, _ := s.CreateUserGroup(ctx, "GroupX")
 				b, _ := s.CreateUserGroup(ctx, "GroupY")
 				c, _ := s.CreateUserGroup(ctx, "GroupZ")
-				s.AddUserGroupToGroup(ctx, b, a) // A contains B
-				s.AddUserGroupToGroup(ctx, c, b) // B contains C
-				return a, c                      // Try to add A to C (creates cycle)
+				if err := s.AddUserGroupToGroup(ctx, b, a); err != nil {
+					t.Fatalf("AddUserGroupToGroup failed: %v", err)
+				}
+				if err := s.AddUserGroupToGroup(ctx, c, b); err != nil {
+					t.Fatalf("AddUserGroupToGroup failed: %v", err)
+				}
+				return a, c // Try to add A to C (creates cycle)
 			},
+			description: "A->B->C, then C->A",
 		},
 	}
 
@@ -485,46 +495,56 @@ func Test_Stage4_TransitiveMembership_ThreeLevelHierarchy(t *testing.T) {
 	engineering, _ := s.CreateUserGroup(ctx, "Engineering")
 	backend, _ := s.CreateUserGroup(ctx, "Backend")
 
-	s.AddUserGroupToGroup(ctx, engineering, company)
-	s.AddUserGroupToGroup(ctx, backend, engineering)
+	if err := s.AddUserGroupToGroup(ctx, engineering, company); err != nil {
+		t.Fatalf("AddUserGroupToGroup failed: %v", err)
+	}
+	if err := s.AddUserGroupToGroup(ctx, backend, engineering); err != nil {
+		t.Fatalf("AddUserGroupToGroup failed: %v", err)
+	}
 
 	// Add users at different levels
-	s.AddUserToGroup(ctx, alice, company)   // Top level
-	s.AddUserToGroup(ctx, bob, engineering) // Middle level
-	s.AddUserToGroup(ctx, charlie, backend) // Bottom level
+	if err := s.AddUserToGroup(ctx, alice, company); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
+	if err := s.AddUserToGroup(ctx, bob, engineering); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
+	if err := s.AddUserToGroup(ctx, charlie, backend); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
 	// dave is not in any group
 
 	tests := []struct {
 		name         string
-		groupID      int
-		wantCount    int
+		description  string
 		wantUsers    []int
 		notWantUsers []int
-		description  string
+		groupID      int
+		wantCount    int
 	}{
 		{
 			name:         "company includes all nested users",
-			groupID:      company,
-			wantCount:    3,
+			description:  "Top level group should include all users from nested groups",
 			wantUsers:    []int{alice, bob, charlie},
 			notWantUsers: []int{dave},
-			description:  "Top level group should include all users from nested groups",
+			groupID:      company,
+			wantCount:    3,
 		},
 		{
 			name:         "engineering includes middle and bottom users",
-			groupID:      engineering,
-			wantCount:    2,
+			description:  "Middle level group should include its users and nested group users",
 			wantUsers:    []int{bob, charlie},
 			notWantUsers: []int{alice, dave},
-			description:  "Middle level group should include its users and nested group users",
+			groupID:      engineering,
+			wantCount:    2,
 		},
 		{
 			name:         "backend includes only direct user",
-			groupID:      backend,
-			wantCount:    1,
+			description:  "Bottom level group should include only its direct users",
 			wantUsers:    []int{charlie},
 			notWantUsers: []int{alice, bob, dave},
-			description:  "Bottom level group should include only its direct users",
+			groupID:      backend,
+			wantCount:    1,
 		},
 	}
 
@@ -570,8 +590,8 @@ func Test_Stage4_TransitiveMembership_MultipleHierarchies(t *testing.T) {
 	tests := []struct {
 		name        string
 		setupFunc   func() (int, []int) // Returns groupID and expected userIDs
-		wantCount   int
 		description string
+		wantCount   int
 	}{
 		{
 			name: "single level with multiple users",
@@ -580,13 +600,13 @@ func Test_Stage4_TransitiveMembership_MultipleHierarchies(t *testing.T) {
 				u2, _ := s.CreateUser(ctx, "User2")
 				u3, _ := s.CreateUser(ctx, "User3")
 				g, _ := s.CreateUserGroup(ctx, "SingleLevel")
-				s.AddUserToGroup(ctx, u1, g)
-				s.AddUserToGroup(ctx, u2, g)
-				s.AddUserToGroup(ctx, u3, g)
+				_ = s.AddUserToGroup(ctx, u1, g)
+				_ = s.AddUserToGroup(ctx, u2, g)
+				_ = s.AddUserToGroup(ctx, u3, g)
 				return g, []int{u1, u2, u3}
 			},
-			wantCount:   3,
 			description: "Single level group with multiple direct users",
+			wantCount:   3,
 		},
 		{
 			name: "two level hierarchy",
@@ -595,13 +615,13 @@ func Test_Stage4_TransitiveMembership_MultipleHierarchies(t *testing.T) {
 				u2, _ := s.CreateUser(ctx, "UserB")
 				parent, _ := s.CreateUserGroup(ctx, "Parent")
 				child, _ := s.CreateUserGroup(ctx, "Child")
-				s.AddUserGroupToGroup(ctx, child, parent)
-				s.AddUserToGroup(ctx, u1, parent)
-				s.AddUserToGroup(ctx, u2, child)
+				_ = s.AddUserGroupToGroup(ctx, child, parent)
+				_ = s.AddUserToGroup(ctx, u1, parent)
+				_ = s.AddUserToGroup(ctx, u2, child)
 				return parent, []int{u1, u2}
 			},
-			wantCount:   2,
 			description: "Two level hierarchy with users at both levels",
+			wantCount:   2,
 		},
 	}
 
@@ -689,7 +709,9 @@ func Test_Stage5_DirectPermission_NotBidirectional(t *testing.T) {
 	bob, _ := s.CreateUser(ctx, "Bob")
 
 	// Grant alice -> bob permission (one way)
-	s.AddUserToUserPermission(ctx, alice, bob)
+	if err := s.AddUserToUserPermission(ctx, alice, bob); err != nil {
+		t.Fatalf("AddUserToUserPermission failed: %v", err)
+	}
 
 	// Bob should NOT be able to access alice
 	_, err := s.GetUserNameWithPermissionCheck(ctx, bob, alice)
@@ -709,7 +731,9 @@ func Test_Stage5_UserInGroupToUserPermission(t *testing.T) {
 	admins, _ := s.CreateUserGroup(ctx, "Admins")
 
 	// Add alice to admins group
-	s.AddUserToGroup(ctx, alice, admins)
+	if err := s.AddUserToGroup(ctx, alice, admins); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
 
 	// Grant admins group permission to access charlie
 	err := s.AddUserGroupToUserPermission(ctx, admins, charlie)
@@ -739,8 +763,12 @@ func Test_Stage5_UserToUserInGroupPermission(t *testing.T) {
 	users, _ := s.CreateUserGroup(ctx, "Users")
 
 	// Add bob and charlie to users group
-	s.AddUserToGroup(ctx, bob, users)
-	s.AddUserToGroup(ctx, charlie, users)
+	if err := s.AddUserToGroup(ctx, bob, users); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
+	if err := s.AddUserToGroup(ctx, charlie, users); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
 
 	// Grant dave permission to access users group
 	err := s.AddUserToUserGroupPermission(ctx, dave, users)
@@ -779,8 +807,12 @@ func Test_Stage5_UserInGroupToUserInGroupPermission(t *testing.T) {
 	users, _ := s.CreateUserGroup(ctx, "Users")
 
 	// Add users to their respective groups
-	s.AddUserToGroup(ctx, eve, managers)
-	s.AddUserToGroup(ctx, bob, users)
+	if err := s.AddUserToGroup(ctx, eve, managers); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
+	if err := s.AddUserToGroup(ctx, bob, users); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
 
 	// Grant managers group permission to access users group
 	err := s.AddUserGroupToUserGroupPermission(ctx, managers, users)
@@ -808,7 +840,9 @@ func Test_Stage5_NoPermission(t *testing.T) {
 	charlie, _ := s.CreateUser(ctx, "Charlie")
 
 	// Grant alice -> bob permission only
-	s.AddUserToUserPermission(ctx, alice, bob)
+	if err := s.AddUserToUserPermission(ctx, alice, bob); err != nil {
+		t.Fatalf("AddUserToUserPermission failed: %v", err)
+	}
 
 	// Charlie should NOT be able to access bob (no permission)
 	_, err := s.GetUserNameWithPermissionCheck(ctx, charlie, bob)
@@ -868,17 +902,29 @@ func Test_Stage5_TransitivePermissions(t *testing.T) {
 	department, _ := s.CreateUserGroup(ctx, "Department")
 	team, _ := s.CreateUserGroup(ctx, "Team")
 
-	s.AddUserGroupToGroup(ctx, department, organization)
-	s.AddUserGroupToGroup(ctx, team, department)
+	if err := s.AddUserGroupToGroup(ctx, department, organization); err != nil {
+		t.Fatalf("AddUserGroupToGroup failed: %v", err)
+	}
+	if err := s.AddUserGroupToGroup(ctx, team, department); err != nil {
+		t.Fatalf("AddUserGroupToGroup failed: %v", err)
+	}
 
 	// Add users to nested groups
-	s.AddUserToGroup(ctx, admin, organization) // Top level
-	s.AddUserToGroup(ctx, member, team)        // Bottom level
+	if err := s.AddUserToGroup(ctx, admin, organization); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
+	if err := s.AddUserToGroup(ctx, member, team); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
 
 	// Admin group has permission on organization (which includes team transitively)
 	adminGroup, _ := s.CreateUserGroup(ctx, "AdminGroup")
-	s.AddUserToGroup(ctx, admin, adminGroup)
-	s.AddUserGroupToUserGroupPermission(ctx, adminGroup, organization)
+	if err := s.AddUserToGroup(ctx, admin, adminGroup); err != nil {
+		t.Fatalf("AddUserToGroup failed: %v", err)
+	}
+	if err := s.AddUserGroupToUserGroupPermission(ctx, adminGroup, organization); err != nil {
+		t.Fatalf("AddUserGroupToUserGroupPermission failed: %v", err)
+	}
 
 	// Admin should be able to access member (transitive through groups)
 	name, err := s.GetUserNameWithPermissionCheck(ctx, admin, member)

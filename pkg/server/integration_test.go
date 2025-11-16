@@ -14,6 +14,11 @@ import (
 
 // HTTP request/response types for integration tests
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const contextUserIDKey contextKey = "contextUserID"
+
 type CreateUserRequest struct {
 	Name string `json:"name"`
 }
@@ -23,8 +28,8 @@ type CreateUserResponse struct {
 }
 
 type GetUserResponse struct {
-	ID   int    `json:"id"`
 	Name string `json:"name"`
+	ID   int    `json:"id"`
 }
 
 type CreateGroupRequest struct {
@@ -36,8 +41,8 @@ type CreateGroupResponse struct {
 }
 
 type GetGroupResponse struct {
-	ID   int    `json:"id"`
 	Name string `json:"name"`
+	ID   int    `json:"id"`
 }
 
 type AddUserToGroupRequest struct {
@@ -46,8 +51,8 @@ type AddUserToGroupRequest struct {
 
 type AddPermissionRequest struct {
 	SourceType string `json:"source_type"` // "user" or "group"
-	SourceID   int    `json:"source_id"`
 	TargetType string `json:"target_type"` // "user" or "group"
+	SourceID   int    `json:"source_id"`
 	TargetID   int    `json:"target_id"`
 }
 
@@ -62,31 +67,39 @@ func NewHTTPHandler(server *Server) *HTTPHandler {
 }
 
 func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Simple router
-	path := r.URL.Path
-	method := r.Method
+	ctx := h.enrichContext(r)
+	h.route(w, r.WithContext(ctx))
+}
 
-	// Extract context user ID from header (simulating authentication)
+// enrichContext adds authentication context from headers
+func (h *HTTPHandler) enrichContext(r *http.Request) context.Context {
 	ctx := r.Context()
 	if contextUserIDStr := r.Header.Get("X-Context-User-ID"); contextUserIDStr != "" {
 		if contextUserID, err := strconv.Atoi(contextUserIDStr); err == nil {
-			ctx = context.WithValue(ctx, "contextUserID", contextUserID)
+			ctx = context.WithValue(ctx, contextUserIDKey, contextUserID)
 		}
 	}
+	return ctx
+}
+
+// route dispatches requests to appropriate handlers
+func (h *HTTPHandler) route(w http.ResponseWriter, r *http.Request) {
+	path := r.URL.Path
+	method := r.Method
 
 	switch {
 	case method == "POST" && path == "/users":
-		h.handleCreateUser(w, r.WithContext(ctx))
+		h.handleCreateUser(w, r)
 	case method == "GET" && strings.HasPrefix(path, "/users/"):
-		h.handleGetUser(w, r.WithContext(ctx))
+		h.handleGetUser(w, r)
 	case method == "POST" && path == "/groups":
-		h.handleCreateGroup(w, r.WithContext(ctx))
+		h.handleCreateGroup(w, r)
 	case method == "GET" && strings.HasPrefix(path, "/groups/"):
-		h.handleGetGroup(w, r.WithContext(ctx))
+		h.handleGetGroup(w, r)
 	case method == "POST" && strings.Contains(path, "/groups/") && strings.HasSuffix(path, "/users"):
-		h.handleAddUserToGroup(w, r.WithContext(ctx))
+		h.handleAddUserToGroup(w, r)
 	case method == "POST" && path == "/permissions":
-		h.handleAddPermission(w, r.WithContext(ctx))
+		h.handleAddPermission(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -108,7 +121,9 @@ func (h *HTTPHandler) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	resp := CreateUserResponse{ID: id}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *HTTPHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +136,7 @@ func (h *HTTPHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if context user ID is present (permission check)
-	contextUserID, hasContext := r.Context().Value("contextUserID").(int)
+	contextUserID, hasContext := r.Context().Value(contextUserIDKey).(int)
 
 	var name string
 	if hasContext {
@@ -144,7 +159,9 @@ func (h *HTTPHandler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 
 	resp := GetUserResponse{ID: userID, Name: name}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *HTTPHandler) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
@@ -163,7 +180,9 @@ func (h *HTTPHandler) handleCreateGroup(w http.ResponseWriter, r *http.Request) 
 	resp := CreateGroupResponse{ID: id}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *HTTPHandler) handleGetGroup(w http.ResponseWriter, r *http.Request) {
@@ -176,7 +195,7 @@ func (h *HTTPHandler) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if context user ID is present (permission check)
-	contextUserID, hasContext := r.Context().Value("contextUserID").(int)
+	contextUserID, hasContext := r.Context().Value(contextUserIDKey).(int)
 
 	var name string
 	if hasContext {
@@ -199,7 +218,9 @@ func (h *HTTPHandler) handleGetGroup(w http.ResponseWriter, r *http.Request) {
 
 	resp := GetGroupResponse{ID: groupID, Name: name}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func (h *HTTPHandler) handleAddUserToGroup(w http.ResponseWriter, r *http.Request) {
@@ -258,12 +279,12 @@ func (h *HTTPHandler) handleAddPermission(w http.ResponseWriter, r *http.Request
 
 // Test helpers
 
-func setupHTTPTestServer(t *testing.T) (*httptest.Server, *Server) {
+func setupHTTPTestServer(t *testing.T) (httpServer *httptest.Server, server *Server) {
 	t.Helper()
 
-	server := setupTestServer(t)
+	server = setupTestServer(t)
 	handler := NewHTTPHandler(server)
-	httpServer := httptest.NewServer(handler)
+	httpServer = httptest.NewServer(handler)
 
 	return httpServer, server
 }
@@ -369,7 +390,7 @@ func addPermissionViaHTTP(t *testing.T, baseURL, sourceType string, sourceID int
 	}
 }
 
-func getUserViaHTTP(t *testing.T, baseURL string, userID int, contextUserID *int) (string, int) {
+func getUserViaHTTP(t *testing.T, baseURL string, userID int, contextUserID *int) (name string, statusCode int) {
 	t.Helper()
 
 	url := fmt.Sprintf("%s/users/%d", baseURL, userID)
@@ -392,7 +413,7 @@ func getUserViaHTTP(t *testing.T, baseURL string, userID int, contextUserID *int
 	return respBody.Name, resp.StatusCode
 }
 
-func getGroupViaHTTP(t *testing.T, baseURL string, groupID int, contextUserID *int) (string, int) {
+func getGroupViaHTTP(t *testing.T, baseURL string, groupID int, contextUserID *int) (name string, statusCode int) {
 	t.Helper()
 
 	url := fmt.Sprintf("%s/groups/%d", baseURL, groupID)
@@ -439,8 +460,12 @@ func Test_Integration_ComplexPermissionScenario(t *testing.T) {
 	admins := createGroupViaHTTP(t, baseURL, "Admins")
 
 	// Build hierarchy: company -> engineering -> backend
-	server.AddUserGroupToGroup(ctx, engineering, company)
-	server.AddUserGroupToGroup(ctx, backend, engineering)
+	if err := server.AddUserGroupToGroup(ctx, engineering, company); err != nil {
+		t.Fatalf("AddUserGroupToGroup failed: %v", err)
+	}
+	if err := server.AddUserGroupToGroup(ctx, backend, engineering); err != nil {
+		t.Fatalf("AddUserGroupToGroup failed: %v", err)
+	}
 
 	// Add users to nested groups
 	addUserToGroupViaHTTP(t, baseURL, alice, admins)    // Alice is admin
@@ -527,8 +552,12 @@ func Test_Integration_TransitiveGroupMembershipWithPermissions(t *testing.T) {
 	adminGroup := createGroupViaHTTP(t, baseURL, "AdminGroup")
 
 	// Build hierarchy
-	server.AddUserGroupToGroup(ctx, department, organization)
-	server.AddUserGroupToGroup(ctx, team, department)
+	if err := server.AddUserGroupToGroup(ctx, department, organization); err != nil {
+		t.Fatalf("AddUserGroupToGroup failed: %v", err)
+	}
+	if err := server.AddUserGroupToGroup(ctx, team, department); err != nil {
+		t.Fatalf("AddUserGroupToGroup failed: %v", err)
+	}
 
 	// Add users at different levels
 	addUserToGroupViaHTTP(t, baseURL, admin, adminGroup)     // Admin in admin group

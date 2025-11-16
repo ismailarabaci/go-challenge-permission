@@ -62,8 +62,8 @@ func (e *CycleDetectedError) Is(target error) bool {
 
 // PermissionDeniedError wraps permission denial information
 type PermissionDeniedError struct {
-	SourceUserID int
 	TargetType   string // "user" or "group"
+	SourceUserID int
 	TargetID     int
 }
 
