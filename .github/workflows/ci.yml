@@ -61,7 +61,7 @@ jobs:
 
     - name: Initialize database
       run: |
-        mysql -h127.0.0.1 -P3306 -uroot -proot testdb < db/init.sql
+        mysql -h127.0.0.1 -P3306 -uroot -proot testdb < db/initdb/db.sql
 
     - name: Download dependencies
       run: go mod download
