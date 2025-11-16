@@ -5,407 +5,887 @@ import (
 	"testing"
 )
 
-// run and validate the server through tests
-
-// Stage 1 Tests
-func TestStage1_CreateAndGetUser(t *testing.T) {
+// Test helper to create a test server
+func setupTestServer(t *testing.T) *Server {
+	t.Helper()
 	s, err := New()
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
-	defer s.Close()
-	ctx := context.Background()
-	
-	// Test CreateUser
-	userID, err := s.CreateUser(ctx, "Alice")
-	if err != nil {
-		t.Fatalf("CreateUser failed: %v", err)
+	return s
+}
+
+// Stage 1 Tests - User Operations
+
+func Test_Stage1_CreateUser(t *testing.T) {
+	tests := []struct {
+		name     string
+		userName string
+	}{
+		{name: "create user Alice", userName: "Alice"},
+		{name: "create user Bob", userName: "Bob"},
+		{name: "create user with spaces", userName: "John Doe"},
 	}
-	if userID <= 0 {
-		t.Fatalf("Expected positive user ID, got %d", userID)
-	}
-	
-	// Test GetUserName
-	name, err := s.GetUserName(ctx, userID)
-	if err != nil {
-		t.Fatalf("GetUserName failed: %v", err)
-	}
-	if name != "Alice" {
-		t.Errorf("Expected name 'Alice', got '%s'", name)
-	}
-	
-	// Test GetUserName with non-existent user
-	_, err = s.GetUserName(ctx, 999999)
-	if err == nil {
-		t.Error("Expected error for non-existent user, got nil")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := setupTestServer(t)
+			defer s.Close()
+			ctx := context.Background()
+
+			userID, err := s.CreateUser(ctx, tt.userName)
+			if err != nil {
+				t.Fatalf("CreateUser failed: %v", err)
+			}
+			if userID <= 0 {
+				t.Errorf("Expected positive user ID, got %d", userID)
+			}
+		})
 	}
 }
 
-// Stage 2 Tests
-func TestStage2_UserGroups(t *testing.T) {
-	s, err := New()
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+func Test_Stage1_GetUserName(t *testing.T) {
+	s := setupTestServer(t)
 	defer s.Close()
 	ctx := context.Background()
-	
-	// Create users
-	user1, _ := s.CreateUser(ctx, "Bob")
-	user2, _ := s.CreateUser(ctx, "Charlie")
-	user3, _ := s.CreateUser(ctx, "Diana")
-	
-	// Create user group
-	groupID, err := s.CreateUserGroup(ctx, "Developers")
+
+	tests := []struct {
+		name     string
+		userName string
+	}{
+		{name: "get user Alice", userName: "Alice"},
+		{name: "get user Bob", userName: "Bob"},
+		{name: "get user Charlie", userName: "Charlie"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create user
+			userID, err := s.CreateUser(ctx, tt.userName)
+			if err != nil {
+				t.Fatalf("CreateUser failed: %v", err)
+			}
+
+			// Get user name
+			name, err := s.GetUserName(ctx, userID)
+			if err != nil {
+				t.Fatalf("GetUserName failed: %v", err)
+			}
+			if name != tt.userName {
+				t.Errorf("Expected name %q, got %q", tt.userName, name)
+			}
+		})
+	}
+}
+
+func Test_Stage1_GetUserName_NonExistent(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	tests := []struct {
+		name   string
+		userID int
+	}{
+		{name: "large non-existent ID", userID: 999999},
+		{name: "negative ID", userID: -1},
+		{name: "zero ID", userID: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := s.GetUserName(ctx, tt.userID)
+			if err == nil {
+				t.Error("Expected error for non-existent user, got nil")
+			}
+		})
+	}
+}
+
+// Stage 2 Tests - User Groups
+
+func Test_Stage2_CreateUserGroup(t *testing.T) {
+	tests := []struct {
+		name      string
+		groupName string
+	}{
+		{name: "create group Developers", groupName: "Developers"},
+		{name: "create group Admins", groupName: "Admins"},
+		{name: "create group with spaces", groupName: "Engineering Team"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := setupTestServer(t)
+			defer s.Close()
+			ctx := context.Background()
+
+			groupID, err := s.CreateUserGroup(ctx, tt.groupName)
+			if err != nil {
+				t.Fatalf("CreateUserGroup failed: %v", err)
+			}
+			if groupID <= 0 {
+				t.Errorf("Expected positive group ID, got %d", groupID)
+			}
+		})
+	}
+}
+
+func Test_Stage2_GetUserGroupName(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		groupName string
+	}{
+		{name: "get group Developers", groupName: "Developers"},
+		{name: "get group Admins", groupName: "Admins"},
+		{name: "get group Users", groupName: "Users"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			groupID, err := s.CreateUserGroup(ctx, tt.groupName)
+			if err != nil {
+				t.Fatalf("CreateUserGroup failed: %v", err)
+			}
+
+			name, err := s.GetUserGroupName(ctx, groupID)
+			if err != nil {
+				t.Fatalf("GetUserGroupName failed: %v", err)
+			}
+			if name != tt.groupName {
+				t.Errorf("Expected group name %q, got %q", tt.groupName, name)
+			}
+		})
+	}
+}
+
+func Test_Stage2_AddUserToGroup(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	tests := []struct {
+		name      string
+		userNames []string
+		groupName string
+		wantCount int
+	}{
+		{
+			name:      "add single user",
+			userNames: []string{"Alice"},
+			groupName: "Group1",
+			wantCount: 1,
+		},
+		{
+			name:      "add multiple users",
+			userNames: []string{"Bob", "Charlie", "Diana"},
+			groupName: "Group2",
+			wantCount: 3,
+		},
+		{
+			name:      "add two users",
+			userNames: []string{"Eve", "Frank"},
+			groupName: "Group3",
+			wantCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create group
+			groupID, err := s.CreateUserGroup(ctx, tt.groupName)
+			if err != nil {
+				t.Fatalf("CreateUserGroup failed: %v", err)
+			}
+
+			// Create and add users
+			for _, userName := range tt.userNames {
+				userID, err := s.CreateUser(ctx, userName)
+				if err != nil {
+					t.Fatalf("CreateUser failed: %v", err)
+				}
+
+				err = s.AddUserToGroup(ctx, userID, groupID)
+				if err != nil {
+					t.Fatalf("AddUserToGroup failed: %v", err)
+				}
+			}
+
+			// Verify count
+			users, err := s.GetUsersInGroup(ctx, groupID)
+			if err != nil {
+				t.Fatalf("GetUsersInGroup failed: %v", err)
+			}
+			if len(users) != tt.wantCount {
+				t.Errorf("Expected %d users in group, got %d", tt.wantCount, len(users))
+			}
+		})
+	}
+}
+
+func Test_Stage2_GetUsersInGroup_Empty(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	groupID, err := s.CreateUserGroup(ctx, "EmptyGroup")
 	if err != nil {
 		t.Fatalf("CreateUserGroup failed: %v", err)
 	}
-	if groupID <= 0 {
-		t.Fatalf("Expected positive group ID, got %d", groupID)
-	}
-	
-	// Test GetUserGroupName
-	groupName, err := s.GetUserGroupName(ctx, groupID)
+
+	users, err := s.GetUsersInGroup(ctx, groupID)
 	if err != nil {
-		t.Fatalf("GetUserGroupName failed: %v", err)
+		t.Fatalf("GetUsersInGroup failed: %v", err)
 	}
-	if groupName != "Developers" {
-		t.Errorf("Expected group name 'Developers', got '%s'", groupName)
+
+	if users == nil {
+		t.Error("Expected empty slice, got nil")
 	}
-	
-	// Add users to group
-	if err := s.AddUserToGroup(ctx, user1, groupID); err != nil {
-		t.Fatalf("AddUserToGroup failed: %v", err)
+	if len(users) != 0 {
+		t.Errorf("Expected 0 users in empty group, got %d", len(users))
 	}
-	if err := s.AddUserToGroup(ctx, user2, groupID); err != nil {
-		t.Fatalf("AddUserToGroup failed: %v", err)
+}
+
+func Test_Stage2_AddUserToGroup_Duplicate(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	userID, _ := s.CreateUser(ctx, "Alice")
+	groupID, _ := s.CreateUserGroup(ctx, "TestGroup")
+
+	// Add user first time
+	err := s.AddUserToGroup(ctx, userID, groupID)
+	if err != nil {
+		t.Fatalf("First AddUserToGroup failed: %v", err)
 	}
-	
+
+	// Add same user again (should not error)
+	err = s.AddUserToGroup(ctx, userID, groupID)
+	if err != nil {
+		t.Errorf("AddUserToGroup duplicate should not error: %v", err)
+	}
+
+	// Verify user is still in group and count is still 1
+	users, _ := s.GetUsersInGroup(ctx, groupID)
+	if len(users) != 1 {
+		t.Errorf("Expected 1 user after duplicate add, got %d", len(users))
+	}
+}
+
+func Test_Stage2_GetUsersInGroup_Membership(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	// Create users
+	user1, _ := s.CreateUser(ctx, "Alice")
+	user2, _ := s.CreateUser(ctx, "Bob")
+	user3, _ := s.CreateUser(ctx, "Charlie")
+
+	// Create group and add only user1 and user2
+	groupID, _ := s.CreateUserGroup(ctx, "TestGroup")
+	s.AddUserToGroup(ctx, user1, groupID)
+	s.AddUserToGroup(ctx, user2, groupID)
+
 	// Get users in group
 	users, err := s.GetUsersInGroup(ctx, groupID)
 	if err != nil {
 		t.Fatalf("GetUsersInGroup failed: %v", err)
 	}
-	if len(users) != 2 {
-		t.Errorf("Expected 2 users in group, got %d", len(users))
-	}
-	
-	// Verify it's an empty slice for empty group
-	emptyGroupID, _ := s.CreateUserGroup(ctx, "Empty")
-	emptyUsers, err := s.GetUsersInGroup(ctx, emptyGroupID)
-	if err != nil {
-		t.Fatalf("GetUsersInGroup failed for empty group: %v", err)
-	}
-	if emptyUsers == nil {
-		t.Error("Expected empty slice, got nil")
-	}
-	if len(emptyUsers) != 0 {
-		t.Errorf("Expected 0 users in empty group, got %d", len(emptyUsers))
-	}
-	
-	// Test adding duplicate (should not error)
-	if err := s.AddUserToGroup(ctx, user1, groupID); err != nil {
-		t.Errorf("AddUserToGroup duplicate should not error: %v", err)
-	}
-	
-	// user3 is not in the group
-	users, _ = s.GetUsersInGroup(ctx, groupID)
-	for _, uid := range users {
-		if uid == user3 {
-			t.Error("user3 should not be in group")
-		}
-	}
-}
 
-// Stage 3 Tests
-func TestStage3_HierarchicalGroups(t *testing.T) {
-	s, err := New()
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
-	defer s.Close()
-	ctx := context.Background()
-	
-	// Create groups
-	engineering, _ := s.CreateUserGroup(ctx, "Engineering")
-	backend, _ := s.CreateUserGroup(ctx, "Backend")
-	frontend, _ := s.CreateUserGroup(ctx, "Frontend")
-	
-	// Add groups to groups
-	if err := s.AddUserGroupToGroup(ctx, backend, engineering); err != nil {
-		t.Fatalf("AddUserGroupToGroup failed: %v", err)
-	}
-	if err := s.AddUserGroupToGroup(ctx, frontend, engineering); err != nil {
-		t.Fatalf("AddUserGroupToGroup failed: %v", err)
-	}
-	
-	// Get groups in group
-	subgroups, err := s.GetUserGroupsInGroup(ctx, engineering)
-	if err != nil {
-		t.Fatalf("GetUserGroupsInGroup failed: %v", err)
-	}
-	if len(subgroups) != 2 {
-		t.Errorf("Expected 2 subgroups, got %d", len(subgroups))
-	}
-	
-	// Test cycle detection - direct cycle
-	err = s.AddUserGroupToGroup(ctx, engineering, engineering)
-	if err == nil {
-		t.Error("Expected error for self-cycle, got nil")
-	}
-	
-	// Test cycle detection - indirect cycle
-	ui, _ := s.CreateUserGroup(ctx, "UI")
-	s.AddUserGroupToGroup(ctx, ui, frontend)
-	err = s.AddUserGroupToGroup(ctx, engineering, ui) // Would create cycle
-	if err == nil {
-		t.Error("Expected error for indirect cycle, got nil")
-	}
-	
-	// Verify empty groups work
-	emptyGroup, _ := s.CreateUserGroup(ctx, "EmptyGroup")
-	emptySubgroups, err := s.GetUserGroupsInGroup(ctx, emptyGroup)
-	if err != nil {
-		t.Fatalf("GetUserGroupsInGroup failed for empty group: %v", err)
-	}
-	if emptySubgroups == nil {
-		t.Error("Expected empty slice, got nil")
-	}
-	if len(emptySubgroups) != 0 {
-		t.Errorf("Expected 0 subgroups, got %d", len(emptySubgroups))
-	}
-}
-
-// Stage 4 Tests
-func TestStage4_TransitiveMembership(t *testing.T) {
-	s, err := New()
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
-	defer s.Close()
-	ctx := context.Background()
-	
-	// Create users
-	alice, _ := s.CreateUser(ctx, "Alice")
-	bob, _ := s.CreateUser(ctx, "Bob")
-	charlie, _ := s.CreateUser(ctx, "Charlie")
-	dave, _ := s.CreateUser(ctx, "Dave")
-	
-	// Create hierarchical groups
-	company, _ := s.CreateUserGroup(ctx, "Company")
-	engineering, _ := s.CreateUserGroup(ctx, "Engineering")
-	backend, _ := s.CreateUserGroup(ctx, "Backend")
-	
-	// Build hierarchy: company -> engineering -> backend
-	s.AddUserGroupToGroup(ctx, engineering, company)
-	s.AddUserGroupToGroup(ctx, backend, engineering)
-	
-	// Add users at different levels
-	s.AddUserToGroup(ctx, alice, company)    // Direct to top level
-	s.AddUserToGroup(ctx, bob, engineering)  // Middle level
-	s.AddUserToGroup(ctx, charlie, backend)  // Bottom level
-	// dave is not in any group
-	
-	// Get transitive users in company (should include all)
-	users, err := s.GetUsersInGroupTransitive(ctx, company)
-	if err != nil {
-		t.Fatalf("GetUsersInGroupTransitive failed: %v", err)
-	}
-	if len(users) != 3 {
-		t.Errorf("Expected 3 users in company (transitive), got %d", len(users))
-	}
-	
-	// Verify all expected users are present
+	// Create map for easy lookup
 	userMap := make(map[int]bool)
 	for _, uid := range users {
 		userMap[uid] = true
 	}
-	if !userMap[alice] || !userMap[bob] || !userMap[charlie] {
-		t.Error("Not all expected users found in transitive membership")
+
+	// Verify user1 and user2 are in group
+	if !userMap[user1] {
+		t.Error("user1 should be in group")
 	}
-	if userMap[dave] {
-		t.Error("dave should not be in transitive membership")
+	if !userMap[user2] {
+		t.Error("user2 should be in group")
 	}
-	
-	// Get transitive users in engineering (should include bob and charlie)
-	users, err = s.GetUsersInGroupTransitive(ctx, engineering)
-	if err != nil {
-		t.Fatalf("GetUsersInGroupTransitive failed: %v", err)
-	}
-	if len(users) != 2 {
-		t.Errorf("Expected 2 users in engineering (transitive), got %d", len(users))
-	}
-	
-	// Get transitive users in backend (should include only charlie)
-	users, err = s.GetUsersInGroupTransitive(ctx, backend)
-	if err != nil {
-		t.Fatalf("GetUsersInGroupTransitive failed: %v", err)
-	}
-	if len(users) != 1 {
-		t.Errorf("Expected 1 user in backend (transitive), got %d", len(users))
-	}
-	if len(users) > 0 && users[0] != charlie {
-		t.Errorf("Expected charlie in backend, got user %d", users[0])
-	}
-	
-	// Test empty group
-	emptyGroup, _ := s.CreateUserGroup(ctx, "Empty")
-	emptyUsers, err := s.GetUsersInGroupTransitive(ctx, emptyGroup)
-	if err != nil {
-		t.Fatalf("GetUsersInGroupTransitive failed for empty group: %v", err)
-	}
-	if emptyUsers == nil {
-		t.Error("Expected empty slice, got nil")
-	}
-	if len(emptyUsers) != 0 {
-		t.Errorf("Expected 0 users, got %d", len(emptyUsers))
+
+	// Verify user3 is NOT in group
+	if userMap[user3] {
+		t.Error("user3 should not be in group")
 	}
 }
 
-// Stage 5 Tests
-func TestStage5_Permissions(t *testing.T) {
-	s, err := New()
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+// Stage 3 Tests - Hierarchical Groups
+
+func Test_Stage3_AddGroupToGroup(t *testing.T) {
+	s := setupTestServer(t)
 	defer s.Close()
 	ctx := context.Background()
-	
+
+	tests := []struct {
+		name      string
+		parent    string
+		children  []string
+		wantCount int
+	}{
+		{
+			name:      "single child group",
+			parent:    "Engineering",
+			children:  []string{"Backend"},
+			wantCount: 1,
+		},
+		{
+			name:      "multiple child groups",
+			parent:    "Company",
+			children:  []string{"Engineering", "Sales", "Marketing"},
+			wantCount: 3,
+		},
+		{
+			name:      "two child groups",
+			parent:    "Development",
+			children:  []string{"Frontend", "Backend"},
+			wantCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create parent group
+			parentID, err := s.CreateUserGroup(ctx, tt.parent)
+			if err != nil {
+				t.Fatalf("CreateUserGroup failed: %v", err)
+			}
+
+			// Create and add child groups
+			for _, childName := range tt.children {
+				childID, err := s.CreateUserGroup(ctx, childName)
+				if err != nil {
+					t.Fatalf("CreateUserGroup failed: %v", err)
+				}
+
+				err = s.AddUserGroupToGroup(ctx, childID, parentID)
+				if err != nil {
+					t.Fatalf("AddUserGroupToGroup failed: %v", err)
+				}
+			}
+
+			// Verify count
+			subgroups, err := s.GetUserGroupsInGroup(ctx, parentID)
+			if err != nil {
+				t.Fatalf("GetUserGroupsInGroup failed: %v", err)
+			}
+			if len(subgroups) != tt.wantCount {
+				t.Errorf("Expected %d subgroups, got %d", tt.wantCount, len(subgroups))
+			}
+		})
+	}
+}
+
+func Test_Stage3_GetUserGroupsInGroup_Empty(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	emptyGroup, err := s.CreateUserGroup(ctx, "EmptyGroup")
+	if err != nil {
+		t.Fatalf("CreateUserGroup failed: %v", err)
+	}
+
+	subgroups, err := s.GetUserGroupsInGroup(ctx, emptyGroup)
+	if err != nil {
+		t.Fatalf("GetUserGroupsInGroup failed: %v", err)
+	}
+
+	if subgroups == nil {
+		t.Error("Expected empty slice, got nil")
+	}
+	if len(subgroups) != 0 {
+		t.Errorf("Expected 0 subgroups, got %d", len(subgroups))
+	}
+}
+
+func Test_Stage3_CycleDetection_SelfCycle(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	groupID, _ := s.CreateUserGroup(ctx, "TestGroup")
+
+	// Try to add group to itself
+	err := s.AddUserGroupToGroup(ctx, groupID, groupID)
+	if err == nil {
+		t.Error("Expected error for self-cycle, got nil")
+	}
+}
+
+func Test_Stage3_CycleDetection_IndirectCycle(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		description string
+		setup       func() (int, int) // Returns childID, parentID that would create cycle
+	}{
+		{
+			name:        "two-level cycle",
+			description: "A->B, then B->A",
+			setup: func() (int, int) {
+				a, _ := s.CreateUserGroup(ctx, "GroupA")
+				b, _ := s.CreateUserGroup(ctx, "GroupB")
+				s.AddUserGroupToGroup(ctx, b, a) // A contains B
+				return a, b                      // Try to add A to B (creates cycle)
+			},
+		},
+		{
+			name:        "three-level cycle",
+			description: "A->B->C, then C->A",
+			setup: func() (int, int) {
+				a, _ := s.CreateUserGroup(ctx, "GroupX")
+				b, _ := s.CreateUserGroup(ctx, "GroupY")
+				c, _ := s.CreateUserGroup(ctx, "GroupZ")
+				s.AddUserGroupToGroup(ctx, b, a) // A contains B
+				s.AddUserGroupToGroup(ctx, c, b) // B contains C
+				return a, c                      // Try to add A to C (creates cycle)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			childID, parentID := tt.setup()
+
+			err := s.AddUserGroupToGroup(ctx, childID, parentID)
+			if err == nil {
+				t.Errorf("Expected error for indirect cycle (%s), got nil", tt.description)
+			}
+		})
+	}
+}
+
+// Stage 4 Tests - Transitive Membership
+
+func Test_Stage4_TransitiveMembership_ThreeLevelHierarchy(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
 	// Create users
 	alice, _ := s.CreateUser(ctx, "Alice")
 	bob, _ := s.CreateUser(ctx, "Bob")
 	charlie, _ := s.CreateUser(ctx, "Charlie")
 	dave, _ := s.CreateUser(ctx, "Dave")
-	eve, _ := s.CreateUser(ctx, "Eve")
-	frank, _ := s.CreateUser(ctx, "Frank")
-	
-	// Create groups
-	admins, _ := s.CreateUserGroup(ctx, "Admins")
-	users, _ := s.CreateUserGroup(ctx, "Users")
-	
-	// Setup group memberships
-	s.AddUserToGroup(ctx, alice, admins)
-	s.AddUserToGroup(ctx, bob, users)
-	s.AddUserToGroup(ctx, charlie, users)
-	
-	// Test Scenario 1: Direct user-to-user permission
-	s.AddUserToUserPermission(ctx, alice, bob)
+
+	// Create hierarchical groups: company -> engineering -> backend
+	company, _ := s.CreateUserGroup(ctx, "Company")
+	engineering, _ := s.CreateUserGroup(ctx, "Engineering")
+	backend, _ := s.CreateUserGroup(ctx, "Backend")
+
+	s.AddUserGroupToGroup(ctx, engineering, company)
+	s.AddUserGroupToGroup(ctx, backend, engineering)
+
+	// Add users at different levels
+	s.AddUserToGroup(ctx, alice, company)   // Top level
+	s.AddUserToGroup(ctx, bob, engineering) // Middle level
+	s.AddUserToGroup(ctx, charlie, backend) // Bottom level
+	// dave is not in any group
+
+	tests := []struct {
+		name         string
+		groupID      int
+		wantCount    int
+		wantUsers    []int
+		notWantUsers []int
+		description  string
+	}{
+		{
+			name:         "company includes all nested users",
+			groupID:      company,
+			wantCount:    3,
+			wantUsers:    []int{alice, bob, charlie},
+			notWantUsers: []int{dave},
+			description:  "Top level group should include all users from nested groups",
+		},
+		{
+			name:         "engineering includes middle and bottom users",
+			groupID:      engineering,
+			wantCount:    2,
+			wantUsers:    []int{bob, charlie},
+			notWantUsers: []int{alice, dave},
+			description:  "Middle level group should include its users and nested group users",
+		},
+		{
+			name:         "backend includes only direct user",
+			groupID:      backend,
+			wantCount:    1,
+			wantUsers:    []int{charlie},
+			notWantUsers: []int{alice, bob, dave},
+			description:  "Bottom level group should include only its direct users",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			users, err := s.GetUsersInGroupTransitive(ctx, tt.groupID)
+			if err != nil {
+				t.Fatalf("GetUsersInGroupTransitive failed: %v", err)
+			}
+
+			if len(users) != tt.wantCount {
+				t.Errorf("Expected %d users, got %d", tt.wantCount, len(users))
+			}
+
+			// Create map for easy lookup
+			userMap := make(map[int]bool)
+			for _, uid := range users {
+				userMap[uid] = true
+			}
+
+			// Verify expected users are present
+			for _, wantUser := range tt.wantUsers {
+				if !userMap[wantUser] {
+					t.Errorf("Expected user %d to be in group", wantUser)
+				}
+			}
+
+			// Verify unwanted users are not present
+			for _, notWantUser := range tt.notWantUsers {
+				if userMap[notWantUser] {
+					t.Errorf("User %d should not be in group", notWantUser)
+				}
+			}
+		})
+	}
+}
+
+func Test_Stage4_TransitiveMembership_MultipleHierarchies(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		setupFunc   func() (int, []int) // Returns groupID and expected userIDs
+		wantCount   int
+		description string
+	}{
+		{
+			name: "single level with multiple users",
+			setupFunc: func() (int, []int) {
+				u1, _ := s.CreateUser(ctx, "User1")
+				u2, _ := s.CreateUser(ctx, "User2")
+				u3, _ := s.CreateUser(ctx, "User3")
+				g, _ := s.CreateUserGroup(ctx, "SingleLevel")
+				s.AddUserToGroup(ctx, u1, g)
+				s.AddUserToGroup(ctx, u2, g)
+				s.AddUserToGroup(ctx, u3, g)
+				return g, []int{u1, u2, u3}
+			},
+			wantCount:   3,
+			description: "Single level group with multiple direct users",
+		},
+		{
+			name: "two level hierarchy",
+			setupFunc: func() (int, []int) {
+				u1, _ := s.CreateUser(ctx, "UserA")
+				u2, _ := s.CreateUser(ctx, "UserB")
+				parent, _ := s.CreateUserGroup(ctx, "Parent")
+				child, _ := s.CreateUserGroup(ctx, "Child")
+				s.AddUserGroupToGroup(ctx, child, parent)
+				s.AddUserToGroup(ctx, u1, parent)
+				s.AddUserToGroup(ctx, u2, child)
+				return parent, []int{u1, u2}
+			},
+			wantCount:   2,
+			description: "Two level hierarchy with users at both levels",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			groupID, expectedUsers := tt.setupFunc()
+
+			users, err := s.GetUsersInGroupTransitive(ctx, groupID)
+			if err != nil {
+				t.Fatalf("GetUsersInGroupTransitive failed: %v", err)
+			}
+
+			if len(users) != tt.wantCount {
+				t.Errorf("Expected %d users, got %d", tt.wantCount, len(users))
+			}
+
+			// Verify all expected users are present
+			userMap := make(map[int]bool)
+			for _, uid := range users {
+				userMap[uid] = true
+			}
+
+			for _, expectedUser := range expectedUsers {
+				if !userMap[expectedUser] {
+					t.Errorf("Expected user %d to be in transitive membership", expectedUser)
+				}
+			}
+		})
+	}
+}
+
+func Test_Stage4_TransitiveMembership_EmptyGroup(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	emptyGroup, _ := s.CreateUserGroup(ctx, "EmptyGroup")
+
+	users, err := s.GetUsersInGroupTransitive(ctx, emptyGroup)
+	if err != nil {
+		t.Fatalf("GetUsersInGroupTransitive failed: %v", err)
+	}
+
+	if users == nil {
+		t.Error("Expected empty slice, got nil")
+	}
+	if len(users) != 0 {
+		t.Errorf("Expected 0 users, got %d", len(users))
+	}
+}
+
+// Stage 5 Tests - Permissions
+
+// Scenario 1: Direct user-to-user permission
+func Test_Stage5_DirectUserToUserPermission(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	alice, _ := s.CreateUser(ctx, "Alice")
+	bob, _ := s.CreateUser(ctx, "Bob")
+
+	// Grant alice permission to access bob
+	err := s.AddUserToUserPermission(ctx, alice, bob)
+	if err != nil {
+		t.Fatalf("AddUserToUserPermission failed: %v", err)
+	}
+
+	// Alice should be able to access bob
 	name, err := s.GetUserNameWithPermissionCheck(ctx, alice, bob)
 	if err != nil {
-		t.Errorf("Scenario 1: Expected alice to access bob, got error: %v", err)
+		t.Errorf("Expected alice to access bob, got error: %v", err)
 	}
 	if name != "Bob" {
-		t.Errorf("Scenario 1: Expected name 'Bob', got '%s'", name)
+		t.Errorf("Expected name 'Bob', got %q", name)
 	}
-	
-	// Test that permission is not bidirectional
-	_, err = s.GetUserNameWithPermissionCheck(ctx, bob, alice)
+}
+
+func Test_Stage5_DirectPermission_NotBidirectional(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	alice, _ := s.CreateUser(ctx, "Alice")
+	bob, _ := s.CreateUser(ctx, "Bob")
+
+	// Grant alice -> bob permission (one way)
+	s.AddUserToUserPermission(ctx, alice, bob)
+
+	// Bob should NOT be able to access alice
+	_, err := s.GetUserNameWithPermissionCheck(ctx, bob, alice)
 	if err == nil {
-		t.Error("Scenario 1: Permission should not be bidirectional")
+		t.Error("Permission should not be bidirectional: bob should not access alice")
 	}
-	
-	// Test Scenario 2: Source user in group -> target user
-	s.AddUserGroupToUserPermission(ctx, admins, charlie)
-	name, err = s.GetUserNameWithPermissionCheck(ctx, alice, charlie)
+}
+
+// Scenario 2: Source user in group -> target user
+func Test_Stage5_UserInGroupToUserPermission(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	alice, _ := s.CreateUser(ctx, "Alice")
+	charlie, _ := s.CreateUser(ctx, "Charlie")
+	admins, _ := s.CreateUserGroup(ctx, "Admins")
+
+	// Add alice to admins group
+	s.AddUserToGroup(ctx, alice, admins)
+
+	// Grant admins group permission to access charlie
+	err := s.AddUserGroupToUserPermission(ctx, admins, charlie)
 	if err != nil {
-		t.Errorf("Scenario 2: Expected alice (in admins) to access charlie, got error: %v", err)
+		t.Fatalf("AddUserGroupToUserPermission failed: %v", err)
+	}
+
+	// Alice (in admins) should be able to access charlie
+	name, err := s.GetUserNameWithPermissionCheck(ctx, alice, charlie)
+	if err != nil {
+		t.Errorf("Expected alice (in admins) to access charlie, got error: %v", err)
 	}
 	if name != "Charlie" {
-		t.Errorf("Scenario 2: Expected name 'Charlie', got '%s'", name)
+		t.Errorf("Expected name 'Charlie', got %q", name)
 	}
-	
-	// Test Scenario 3: Source user -> target user in group
-	s.AddUserToUserGroupPermission(ctx, dave, users)
-	name, err = s.GetUserNameWithPermissionCheck(ctx, dave, bob)
+}
+
+// Scenario 3: Source user -> target user in group
+func Test_Stage5_UserToUserInGroupPermission(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	bob, _ := s.CreateUser(ctx, "Bob")
+	charlie, _ := s.CreateUser(ctx, "Charlie")
+	dave, _ := s.CreateUser(ctx, "Dave")
+	users, _ := s.CreateUserGroup(ctx, "Users")
+
+	// Add bob and charlie to users group
+	s.AddUserToGroup(ctx, bob, users)
+	s.AddUserToGroup(ctx, charlie, users)
+
+	// Grant dave permission to access users group
+	err := s.AddUserToUserGroupPermission(ctx, dave, users)
 	if err != nil {
-		t.Errorf("Scenario 3: Expected dave to access bob (in users), got error: %v", err)
+		t.Fatalf("AddUserToUserGroupPermission failed: %v", err)
+	}
+
+	// Dave should be able to access bob (in users)
+	name, err := s.GetUserNameWithPermissionCheck(ctx, dave, bob)
+	if err != nil {
+		t.Errorf("Expected dave to access bob (in users), got error: %v", err)
 	}
 	if name != "Bob" {
-		t.Errorf("Scenario 3: Expected name 'Bob', got '%s'", name)
+		t.Errorf("Expected name 'Bob', got %q", name)
 	}
-	
+
+	// Dave should also be able to access charlie (in users)
 	name, err = s.GetUserNameWithPermissionCheck(ctx, dave, charlie)
 	if err != nil {
-		t.Errorf("Scenario 3: Expected dave to access charlie (in users), got error: %v", err)
+		t.Errorf("Expected dave to access charlie (in users), got error: %v", err)
 	}
 	if name != "Charlie" {
-		t.Errorf("Scenario 3: Expected name 'Charlie', got '%s'", name)
+		t.Errorf("Expected name 'Charlie', got %q", name)
 	}
-	
-	// Test Scenario 4: Source user in group -> target user in group
+}
+
+// Scenario 4: Source user in group -> target user in group
+func Test_Stage5_UserInGroupToUserInGroupPermission(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	bob, _ := s.CreateUser(ctx, "Bob")
+	eve, _ := s.CreateUser(ctx, "Eve")
 	managers, _ := s.CreateUserGroup(ctx, "Managers")
+	users, _ := s.CreateUserGroup(ctx, "Users")
+
+	// Add users to their respective groups
 	s.AddUserToGroup(ctx, eve, managers)
-	s.AddUserGroupToUserGroupPermission(ctx, managers, users)
-	
-	name, err = s.GetUserNameWithPermissionCheck(ctx, eve, bob)
+	s.AddUserToGroup(ctx, bob, users)
+
+	// Grant managers group permission to access users group
+	err := s.AddUserGroupToUserGroupPermission(ctx, managers, users)
 	if err != nil {
-		t.Errorf("Scenario 4: Expected eve (in managers) to access bob (in users), got error: %v", err)
+		t.Fatalf("AddUserGroupToUserGroupPermission failed: %v", err)
+	}
+
+	// Eve (in managers) should be able to access bob (in users)
+	name, err := s.GetUserNameWithPermissionCheck(ctx, eve, bob)
+	if err != nil {
+		t.Errorf("Expected eve (in managers) to access bob (in users), got error: %v", err)
 	}
 	if name != "Bob" {
-		t.Errorf("Scenario 4: Expected name 'Bob', got '%s'", name)
+		t.Errorf("Expected name 'Bob', got %q", name)
 	}
-	
-	// Test no permission
-	_, err = s.GetUserNameWithPermissionCheck(ctx, frank, bob)
+}
+
+func Test_Stage5_NoPermission(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	alice, _ := s.CreateUser(ctx, "Alice")
+	bob, _ := s.CreateUser(ctx, "Bob")
+	charlie, _ := s.CreateUser(ctx, "Charlie")
+
+	// Grant alice -> bob permission only
+	s.AddUserToUserPermission(ctx, alice, bob)
+
+	// Charlie should NOT be able to access bob (no permission)
+	_, err := s.GetUserNameWithPermissionCheck(ctx, charlie, bob)
 	if err == nil {
-		t.Error("Expected error for frank accessing bob without permission")
+		t.Error("Expected error for charlie accessing bob without permission")
 	}
-	
-	// Test GetUserGroupNameWithPermissionCheck
-	// Direct user to group permission
-	s.AddUserToUserGroupPermission(ctx, alice, admins)
+
+	// Charlie should NOT be able to access alice (no permission)
+	_, err = s.GetUserNameWithPermissionCheck(ctx, charlie, alice)
+	if err == nil {
+		t.Error("Expected error for charlie accessing alice without permission")
+	}
+}
+
+func Test_Stage5_GetUserGroupNameWithPermissionCheck(t *testing.T) {
+	s := setupTestServer(t)
+	defer s.Close()
+	ctx := context.Background()
+
+	alice, _ := s.CreateUser(ctx, "Alice")
+	frank, _ := s.CreateUser(ctx, "Frank")
+	admins, _ := s.CreateUserGroup(ctx, "Admins")
+
+	// Grant alice permission to access admins group
+	err := s.AddUserToUserGroupPermission(ctx, alice, admins)
+	if err != nil {
+		t.Fatalf("AddUserToUserGroupPermission failed: %v", err)
+	}
+
+	// Alice should be able to access admins group
 	groupName, err := s.GetUserGroupNameWithPermissionCheck(ctx, alice, admins)
 	if err != nil {
 		t.Errorf("Expected alice to access admins group, got error: %v", err)
 	}
 	if groupName != "Admins" {
-		t.Errorf("Expected group name 'Admins', got '%s'", groupName)
+		t.Errorf("Expected group name 'Admins', got %q", groupName)
 	}
-	
-	// No permission on group
+
+	// Frank should NOT be able to access admins group (no permission)
 	_, err = s.GetUserGroupNameWithPermissionCheck(ctx, frank, admins)
 	if err == nil {
 		t.Error("Expected error for frank accessing admins group without permission")
 	}
 }
 
-// Test transitive permissions with hierarchical groups
-func TestStage5_TransitivePermissions(t *testing.T) {
-	s, err := New()
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
+func Test_Stage5_TransitivePermissions(t *testing.T) {
+	s := setupTestServer(t)
 	defer s.Close()
 	ctx := context.Background()
-	
+
 	// Create users
 	admin, _ := s.CreateUser(ctx, "Admin")
 	member, _ := s.CreateUser(ctx, "Member")
-	
-	// Create hierarchical groups
+
+	// Create hierarchical groups: organization -> department -> team
 	organization, _ := s.CreateUserGroup(ctx, "Organization")
 	department, _ := s.CreateUserGroup(ctx, "Department")
 	team, _ := s.CreateUserGroup(ctx, "Team")
-	
-	// Build hierarchy: organization -> department -> team
+
 	s.AddUserGroupToGroup(ctx, department, organization)
 	s.AddUserGroupToGroup(ctx, team, department)
-	
+
 	// Add users to nested groups
-	s.AddUserToGroup(ctx, admin, organization)  // Top level
-	s.AddUserToGroup(ctx, member, team)         // Bottom level
-	
-	// Admin group has permission on team members
+	s.AddUserToGroup(ctx, admin, organization) // Top level
+	s.AddUserToGroup(ctx, member, team)        // Bottom level
+
+	// Admin group has permission on organization (which includes team transitively)
 	adminGroup, _ := s.CreateUserGroup(ctx, "AdminGroup")
 	s.AddUserToGroup(ctx, admin, adminGroup)
 	s.AddUserGroupToUserGroupPermission(ctx, adminGroup, organization)
-	
+
 	// Admin should be able to access member (transitive through groups)
 	name, err := s.GetUserNameWithPermissionCheck(ctx, admin, member)
 	if err != nil {
 		t.Errorf("Expected admin to access member transitively, got error: %v", err)
 	}
 	if name != "Member" {
-		t.Errorf("Expected name 'Member', got '%s'", name)
+		t.Errorf("Expected name 'Member', got %q", name)
 	}
 }
