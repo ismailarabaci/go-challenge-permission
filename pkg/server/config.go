@@ -1,6 +1,7 @@
 package server
 
 import (
+	"os"
 	"time"
 )
 
@@ -21,9 +22,15 @@ type Config struct {
 }
 
 // DefaultConfig returns a Config with sensible defaults
+// Reads DatabaseDSN from MYSQL_DSN environment variable if set
 func DefaultConfig() Config {
+	dsn := os.Getenv("MYSQL_DSN")
+	if dsn == "" {
+		dsn = "blp:password@tcp(localhost:3306)/blp-coding-challenge"
+	}
+
 	return Config{
-		DatabaseDSN:     "blp:password@tcp(localhost:3306)/blp-coding-challenge",
+		DatabaseDSN:     dsn,
 		MaxOpenConns:    25,
 		MaxIdleConns:    5,
 		ConnMaxLifetime: 5 * time.Minute,
