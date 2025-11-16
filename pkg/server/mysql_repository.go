@@ -221,11 +221,13 @@ func NewMySQLRepository(db *sql.DB) *MySQLRepository {
 	return &MySQLRepository{db: db}
 }
 
-// CreateUser creates a new user and returns their ID
-func (r *MySQLRepository) CreateUser(ctx context.Context, name string) (int, error) {
-	result, err := r.db.ExecContext(ctx, queryInsertUser, name)
+// Helper methods to reduce repetition
+
+// execInsert executes an insert query and returns the last insert ID
+func (r *MySQLRepository) execInsert(ctx context.Context, query string, errorMsg string, args ...interface{}) (int, error) {
+	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create user: %w", err)
+		return 0, fmt.Errorf("%s: %w", errorMsg, err)
 	}
 
 	id, err := result.LastInsertId()
@@ -234,49 +236,76 @@ func (r *MySQLRepository) CreateUser(ctx context.Context, name string) (int, err
 	}
 
 	return int(id), nil
+}
+
+// queryString queries a single string value with custom error handling for not found
+func (r *MySQLRepository) queryString(ctx context.Context, query string, notFoundErr error, errorMsg string, args ...interface{}) (string, error) {
+	var value string
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&value)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", notFoundErr
+		}
+		return "", fmt.Errorf("%s: %w", errorMsg, err)
+	}
+	return value, nil
+}
+
+// queryIDs queries a list of integer IDs
+func (r *MySQLRepository) queryIDs(ctx context.Context, query string, errorMsg string, args ...interface{}) ([]int, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", errorMsg, err)
+	}
+	defer rows.Close()
+
+	ids := make([]int, 0)
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return ids, nil
+}
+
+// queryExists checks if a query returns any rows
+func (r *MySQLRepository) queryExists(ctx context.Context, query string, errorMsg string, args ...interface{}) (bool, error) {
+	var exists int
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", errorMsg, err)
+	}
+	return true, nil
+}
+
+// CreateUser creates a new user and returns their ID
+func (r *MySQLRepository) CreateUser(ctx context.Context, name string) (int, error) {
+	return r.execInsert(ctx, queryInsertUser, "failed to create user", name)
 }
 
 // GetUserByID retrieves a user's name by their ID
 func (r *MySQLRepository) GetUserByID(ctx context.Context, userID int) (string, error) {
-	var name string
-	err := r.db.QueryRowContext(ctx, querySelectUser, userID).Scan(&name)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", &UserNotFoundError{UserID: userID}
-		}
-		return "", fmt.Errorf("failed to get user name: %w", err)
-	}
-
-	return name, nil
+	return r.queryString(ctx, querySelectUser, &UserNotFoundError{UserID: userID}, "failed to get user name", userID)
 }
 
 // CreateUserGroup creates a new user group and returns its ID
 func (r *MySQLRepository) CreateUserGroup(ctx context.Context, name string) (int, error) {
-	result, err := r.db.ExecContext(ctx, queryInsertUserGroup, name)
-	if err != nil {
-		return 0, fmt.Errorf("failed to create user group: %w", err)
-	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("failed to get last insert id: %w", err)
-	}
-
-	return int(id), nil
+	return r.execInsert(ctx, queryInsertUserGroup, "failed to create user group", name)
 }
 
 // GetUserGroupByID retrieves a user group's name by its ID
 func (r *MySQLRepository) GetUserGroupByID(ctx context.Context, groupID int) (string, error) {
-	var name string
-	err := r.db.QueryRowContext(ctx, querySelectUserGroup, groupID).Scan(&name)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", &UserGroupNotFoundError{UserGroupID: groupID}
-		}
-		return "", fmt.Errorf("failed to get user group name: %w", err)
-	}
-
-	return name, nil
+	return r.queryString(ctx, querySelectUserGroup, &UserGroupNotFoundError{UserGroupID: groupID}, "failed to get user group name", groupID)
 }
 
 // AddUserToGroup adds a user to a group
@@ -291,50 +320,12 @@ func (r *MySQLRepository) AddUserToGroup(ctx context.Context, userID, groupID in
 
 // GetUsersInGroup returns all users directly in the specified group
 func (r *MySQLRepository) GetUsersInGroup(ctx context.Context, groupID int) ([]int, error) {
-	rows, err := r.db.QueryContext(ctx, querySelectUsersInGroup, groupID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get users in group: %w", err)
-	}
-	defer rows.Close()
-
-	userIDs := make([]int, 0)
-	for rows.Next() {
-		var userID int
-		if err := rows.Scan(&userID); err != nil {
-			return nil, fmt.Errorf("failed to scan user id: %w", err)
-		}
-		userIDs = append(userIDs, userID)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
-	}
-
-	return userIDs, nil
+	return r.queryIDs(ctx, querySelectUsersInGroup, "failed to get users in group", groupID)
 }
 
 // GetUsersInGroupTransitive returns all users in the group and all nested subgroups
 func (r *MySQLRepository) GetUsersInGroupTransitive(ctx context.Context, groupID int) ([]int, error) {
-	rows, err := r.db.QueryContext(ctx, querySelectUsersInGroupTransitive, groupID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get users in group transitive: %w", err)
-	}
-	defer rows.Close()
-
-	userIDs := make([]int, 0)
-	for rows.Next() {
-		var userID int
-		if err := rows.Scan(&userID); err != nil {
-			return nil, fmt.Errorf("failed to scan user id: %w", err)
-		}
-		userIDs = append(userIDs, userID)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
-	}
-
-	return userIDs, nil
+	return r.queryIDs(ctx, querySelectUsersInGroupTransitive, "failed to get users in group transitive", groupID)
 }
 
 // AddGroupToGroup adds a child group to a parent group
@@ -349,26 +340,7 @@ func (r *MySQLRepository) AddGroupToGroup(ctx context.Context, childID, parentID
 
 // GetGroupsInGroup returns all groups directly in the specified group
 func (r *MySQLRepository) GetGroupsInGroup(ctx context.Context, groupID int) ([]int, error) {
-	rows, err := r.db.QueryContext(ctx, querySelectGroupsInGroup, groupID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get groups in group: %w", err)
-	}
-	defer rows.Close()
-
-	groupIDs := make([]int, 0)
-	for rows.Next() {
-		var gid int
-		if err := rows.Scan(&gid); err != nil {
-			return nil, fmt.Errorf("failed to scan group id: %w", err)
-		}
-		groupIDs = append(groupIDs, gid)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
-	}
-
-	return groupIDs, nil
+	return r.queryIDs(ctx, querySelectGroupsInGroup, "failed to get groups in group", groupID)
 }
 
 // WouldCreateCycle checks if adding child to parent would create a cycle
@@ -378,16 +350,7 @@ func (r *MySQLRepository) WouldCreateCycle(ctx context.Context, childID, parentI
 		return true, nil
 	}
 
-	var exists int
-	err := r.db.QueryRowContext(ctx, queryCheckCycle, childID, parentID).Scan(&exists)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("failed to check for cycle: %w", err)
-	}
-
-	return true, nil
+	return r.queryExists(ctx, queryCheckCycle, "failed to check for cycle", childID, parentID)
 }
 
 // AddPermission adds a permission record
@@ -402,42 +365,22 @@ func (r *MySQLRepository) AddPermission(ctx context.Context, sourceType, targetT
 
 // HasUserPermissionOnUser checks if a user has permission to access another user
 func (r *MySQLRepository) HasUserPermissionOnUser(ctx context.Context, sourceUserID, targetUserID int) (bool, error) {
-	var exists int
-	err := r.db.QueryRowContext(ctx, queryCheckUserPermissionOnUser,
+	return r.queryExists(ctx, queryCheckUserPermissionOnUser, "failed to check user permission on user",
 		sourceUserID, targetUserID, // Scenario 1
 		sourceUserID, targetUserID, // Scenario 2
 		targetUserID, sourceUserID, // Scenario 3
 		sourceUserID, targetUserID, // Scenario 4
-	).Scan(&exists)
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("failed to check user permission on user: %w", err)
-	}
-
-	return true, nil
+	)
 }
 
 // HasUserPermissionOnGroup checks if a user has permission to access a group
 func (r *MySQLRepository) HasUserPermissionOnGroup(ctx context.Context, sourceUserID, targetGroupID int) (bool, error) {
-	var exists int
-	err := r.db.QueryRowContext(ctx, queryCheckUserPermissionOnGroup,
+	return r.queryExists(ctx, queryCheckUserPermissionOnGroup, "failed to check user permission on group",
 		sourceUserID, targetGroupID, // Scenario 1
 		sourceUserID, targetGroupID, // Scenario 2
 		targetGroupID, sourceUserID, // Scenario 3
 		sourceUserID, targetGroupID, // Scenario 4
-	).Scan(&exists)
-
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("failed to check user permission on group: %w", err)
-	}
-
-	return true, nil
+	)
 }
 
 // Close closes the database connection
