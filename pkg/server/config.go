@@ -26,7 +26,7 @@ type Config struct {
 func DefaultConfig() Config {
 	dsn := os.Getenv("MYSQL_DSN")
 	if dsn == "" {
-		dsn = "blp:password@tcp(localhost:3306)/blp-coding-challenge"
+		dsn = "blp:password@tcp(localhost:3306)/blp-coding-challenge?parseTime=true"
 	}
 
 	return Config{

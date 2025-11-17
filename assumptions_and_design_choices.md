@@ -335,6 +335,8 @@ GitHub Actions for automated testing, linting, and code quality checks.
 
 **Benefits:** Catches issues before merge, prevents regressions, documents build process, provides visibility via badges
 
+**Branching Strategy:** Currently using a single branch approach (master/main) for simplicity. CI runs on every push to the main branch and on pull requests. This is appropriate for a solo developer or small team working on a focused project. In the future, if and when more contributors join, we could switch to a multi-branch strategy (e.g., feature branches, develop/staging/production branches) with additional protection rules, code review requirements, and deployment pipelines per environment
+
 ---
 
 ## Database Schema: Separate Tables vs Single Principals Table
@@ -497,4 +499,79 @@ SQL foreign keys **cannot be conditional**—they must reference a single, stati
 
 ### Conclusion
 Deliberate choice driven by polymorphic requirements. SQL cannot enforce conditional FKs. Application-level validation, controlled access, and comprehensive testing compensate for lack of database-enforced referential integrity. Flexibility and simplicity outweigh integrity trade-offs for this use case.
+
+---
+
+## Transaction Handling: Explicit vs Implicit
+
+### Decision
+The repository layer does not wrap operations in explicit database transactions for most operations.
+
+### Rationale
+
+**Operations are idempotent:** INSERT ... ON DUPLICATE KEY UPDATE ensures operations can be retried safely without creating duplicates or causing errors.
+
+**Single-query operations:** Most repository methods execute a single query, so transactions add no value—atomicity is already guaranteed at the query level.
+
+**Read-before-write pattern:** Cycle detection in `AddUserGroupToGroup` reads first (cycle check), then writes (insert). For this use case, the eventual consistency model is acceptable.
+
+**Simplicity:** No transaction management overhead, simpler error handling, clearer code flow without Begin/Commit/Rollback boilerplate.
+
+### Trade-offs
+
+**What you lose:** No ACID guarantees across multiple operations in `AddUserGroupToGroup` (cycle check + insert are two separate queries). A concurrent modification could theoretically create a cycle between the check and insert.
+
+**What you gain:** Simpler code, better performance (no transaction overhead), connection pool efficiency (no holding connections during multi-step operations), easier error handling.
+
+**Risk mitigation:** Idempotent operations via ON DUPLICATE KEY UPDATE, cycle checking uses recursive CTEs for consistency, database-level constraints prevent most integrity violations, concurrent cycle creation is extremely rare in typical usage patterns.
+
+### Code Example
+
+```go
+// ✅ CHOSEN: No explicit transaction
+func (s *Server) AddUserGroupToGroup(ctx context.Context, childID, parentID int) error {
+    // Check for cycle (separate query)
+    hasCycle, err := s.repo.WouldCreateCycle(ctx, childID, parentID)
+    if err != nil {
+        return fmt.Errorf("failed to check for cycle: %w", err)
+    }
+    if hasCycle {
+        return &CycleDetectedError{ChildGroupID: childID, ParentGroupID: parentID}
+    }
+    
+    // Insert relationship (separate query)
+    return s.repo.AddGroupToGroup(ctx, childID, parentID)
+}
+```
+
+```go
+// ❌ REJECTED: Explicit transaction (unnecessary complexity)
+func (s *Server) AddUserGroupToGroup(ctx context.Context, childID, parentID int) error {
+    tx, err := s.db.BeginTx(ctx, nil)
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %w", err)
+    }
+    defer tx.Rollback() // Rollback if not committed
+    
+    // Check for cycle within transaction
+    hasCycle, err := s.repo.WouldCreateCycleWithTx(ctx, tx, childID, parentID)
+    if err != nil {
+        return fmt.Errorf("failed to check for cycle: %w", err)
+    }
+    if hasCycle {
+        return &CycleDetectedError{ChildGroupID: childID, ParentGroupID: parentID}
+    }
+    
+    // Insert relationship within transaction
+    if err := s.repo.AddGroupToGroupWithTx(ctx, tx, childID, parentID); err != nil {
+        return err
+    }
+    
+    // Commit transaction
+    return tx.Commit()
+}
+```
+
+### Conclusion
+For this permissions management system with idempotent operations, explicit transactions add complexity without significant benefit. The database constraints, idempotent queries (ON DUPLICATE KEY UPDATE), and recursive CTEs provide sufficient data integrity. The rare race condition window (concurrent cycle creation) is acceptable for this use case and would be caught on retry.
 
