@@ -587,4 +587,22 @@ func (r *MySQLRepository) AddUserToGroup(ctx context.Context, userID, groupID in
 ### Conclusion
 This permissions management system uses a **selective transaction strategy**: explicit transactions for critical multi-step operations where data integrity is paramount (`AddGroupToGroup` with cycle detection), and no transactions for simple single-query operations where atomicity is already guaranteed. This balanced approach provides strong consistency guarantees where needed while maintaining simplicity and performance for the majority of operations. The idempotent queries (ON DUPLICATE KEY UPDATE) and database constraints handle data integrity for non-transactional operations.
 
+---
+
+## API Documentation: No Swagger/OpenAPI
+
+### Decision
+No Swagger/OpenAPI documentation included.
+
+### Rationale
+
+**Library, not REST API:** Challenge requires *"server logic (not an actual http server)"*. Core implementation exposes Go interfaces (Stage1-Stage5), not HTTP endpoints. HTTP handlers exist only in integration tests.
+
+**Dependency constraints:** Swagger requires external libraries (`swaggo/swag`, etc.), violating challenge requirement of "no libraries other than standard library."
+
+**Go-native documentation:** GoDoc comments, README examples, and this architecture document provide appropriate documentation for a Go library/SDK.
+
+### Conclusion
+Swagger is designed for REST APIs. For a library-focused challenge with no external dependencies, Go-native documentation is the appropriate choice.
+
 
