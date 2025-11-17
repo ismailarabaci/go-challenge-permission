@@ -21,7 +21,7 @@ A robust, production-ready permissions management system written in Go that hand
 - **Database-Backed**: MySQL 8.0 with optimized queries
 - **Concurrent-Safe**: Uses Go's goroutines with database connection pooling
 - **Zero External Dependencies**: Built with Go standard library only (except MySQL driver)
-- **Comprehensive Testing**: 24 unit tests + 2 integration tests with 79%+ coverage
+- **Comprehensive Testing**: 24 unit tests + 2 integration tests with 76%+ coverage
 - **CI/CD Pipeline**: Automated testing, linting, and formatting checks
 
 ## Quick Start

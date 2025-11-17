@@ -99,20 +99,8 @@ func (s *Server) GetUsersInGroup(ctx context.Context, userGroupID int) ([]int, e
 
 // AddUserGroupToGroup adds a child group to a parent group
 // Returns an error if this would create a cycle
+// Uses a database transaction to ensure atomicity of cycle check and insert
 func (s *Server) AddUserGroupToGroup(ctx context.Context, childUserGroupID, parentUserGroupID int) error {
-	// Check for cycle before adding
-	hasCycle, err := s.repo.WouldCreateCycle(ctx, childUserGroupID, parentUserGroupID)
-	if err != nil {
-		return fmt.Errorf("failed to check for cycle: %w", err)
-	}
-
-	if hasCycle {
-		return &CycleDetectedError{
-			ChildGroupID:  childUserGroupID,
-			ParentGroupID: parentUserGroupID,
-		}
-	}
-
 	return s.repo.AddGroupToGroup(ctx, childUserGroupID, parentUserGroupID)
 }
 

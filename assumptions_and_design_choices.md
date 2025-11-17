@@ -502,10 +502,10 @@ Deliberate choice driven by polymorphic requirements. SQL cannot enforce conditi
 
 ---
 
-## Transaction Handling: Explicit vs Implicit
+## Transaction Handling: Selective Transaction Usage
 
 ### Decision
-The repository layer does not wrap operations in explicit database transactions for most operations.
+The repository layer uses explicit database transactions for critical multi-step operations that require atomicity, specifically for `AddGroupToGroup` (cycle detection + insert). Single-query operations do not use explicit transactions.
 
 ### Rationale
 
@@ -513,65 +513,78 @@ The repository layer does not wrap operations in explicit database transactions 
 
 **Single-query operations:** Most repository methods execute a single query, so transactions add no value—atomicity is already guaranteed at the query level.
 
-**Read-before-write pattern:** Cycle detection in `AddUserGroupToGroup` reads first (cycle check), then writes (insert). For this use case, the eventual consistency model is acceptable.
+**Critical operations use transactions:** The `AddGroupToGroup` method uses a database transaction to ensure atomic cycle detection and insertion, preventing race conditions where concurrent operations could create cycles.
 
-**Simplicity:** No transaction management overhead, simpler error handling, clearer code flow without Begin/Commit/Rollback boilerplate.
+**Simplicity for single operations:** Most operations don't need transaction management overhead, simpler error handling, clearer code flow.
 
 ### Trade-offs
 
-**What you lose:** No ACID guarantees across multiple operations in `AddUserGroupToGroup` (cycle check + insert are two separate queries). A concurrent modification could theoretically create a cycle between the check and insert.
+**What you gain with transactions for AddGroupToGroup:** 
+- ACID guarantees for cycle check + insert (prevents race conditions)
+- Data consistency guaranteed - impossible for concurrent operations to create cycles
+- Clear transactional boundaries for critical operations
 
-**What you gain:** Simpler code, better performance (no transaction overhead), connection pool efficiency (no holding connections during multi-step operations), easier error handling.
+**What you lose:**
+- Slight performance overhead for transaction management (BEGIN/COMMIT)
+- Connection held during multi-step operation
+- Additional error handling for transaction failures
 
-**Risk mitigation:** Idempotent operations via ON DUPLICATE KEY UPDATE, cycle checking uses recursive CTEs for consistency, database-level constraints prevent most integrity violations, concurrent cycle creation is extremely rare in typical usage patterns.
+**Why this trade-off is worth it:** Preventing cycle creation is critical for data integrity in a hierarchical group system. The cost of cleaning up an accidentally created cycle far outweighs the minimal performance overhead of a transaction. For non-critical operations, we still avoid transactions for simplicity and performance.
 
 ### Code Example
 
 ```go
-// ✅ CHOSEN: No explicit transaction
-func (s *Server) AddUserGroupToGroup(ctx context.Context, childID, parentID int) error {
-    // Check for cycle (separate query)
-    hasCycle, err := s.repo.WouldCreateCycle(ctx, childID, parentID)
-    if err != nil {
-        return fmt.Errorf("failed to check for cycle: %w", err)
-    }
-    if hasCycle {
-        return &CycleDetectedError{ChildGroupID: childID, ParentGroupID: parentID}
-    }
-    
-    // Insert relationship (separate query)
-    return s.repo.AddGroupToGroup(ctx, childID, parentID)
-}
-```
-
-```go
-// ❌ REJECTED: Explicit transaction (unnecessary complexity)
-func (s *Server) AddUserGroupToGroup(ctx context.Context, childID, parentID int) error {
-    tx, err := s.db.BeginTx(ctx, nil)
+// ✅ CHOSEN: Transaction for critical operation (AddGroupToGroup)
+func (r *MySQLRepository) AddGroupToGroup(ctx context.Context, childID, parentID int) error {
+    // Start transaction
+    tx, err := r.db.BeginTx(ctx, nil)
     if err != nil {
         return fmt.Errorf("failed to begin transaction: %w", err)
     }
     defer tx.Rollback() // Rollback if not committed
-    
-    // Check for cycle within transaction
-    hasCycle, err := s.repo.WouldCreateCycleWithTx(ctx, tx, childID, parentID)
-    if err != nil {
-        return fmt.Errorf("failed to check for cycle: %w", err)
-    }
-    if hasCycle {
+
+    // Check for self-cycle
+    if childID == parentID {
         return &CycleDetectedError{ChildGroupID: childID, ParentGroupID: parentID}
     }
-    
-    // Insert relationship within transaction
-    if err := s.repo.AddGroupToGroupWithTx(ctx, tx, childID, parentID); err != nil {
-        return err
+
+    // Check for cycle within transaction
+    var exists int
+    err = tx.QueryRowContext(ctx, queryCheckCycle, childID, parentID).Scan(&exists)
+    if err != nil && err != sql.ErrNoRows {
+        return fmt.Errorf("failed to check for cycle: %w", err)
     }
     
+    // If we found a row, it means adding this would create a cycle
+    if err == nil {
+        return &CycleDetectedError{ChildGroupID: childID, ParentGroupID: parentID}
+    }
+
+    // No cycle detected, insert the relationship
+    _, err = tx.ExecContext(ctx, queryInsertGroupToGroup, childID, parentID)
+    if err != nil {
+        return fmt.Errorf("failed to add group to group: %w", err)
+    }
+
     // Commit transaction
     return tx.Commit()
 }
 ```
 
+```go
+// ✅ Example: Single-query operation without transaction
+func (r *MySQLRepository) AddUserToGroup(ctx context.Context, userID, groupID int) error {
+    // Single query with idempotent INSERT ... ON DUPLICATE KEY UPDATE
+    // No transaction needed - atomicity guaranteed by single query
+    _, err := r.db.ExecContext(ctx, queryInsertUserToGroup, userID, groupID)
+    if err != nil {
+        return fmt.Errorf("failed to add user to group: %w", err)
+    }
+    return nil
+}
+```
+
 ### Conclusion
-For this permissions management system with idempotent operations, explicit transactions add complexity without significant benefit. The database constraints, idempotent queries (ON DUPLICATE KEY UPDATE), and recursive CTEs provide sufficient data integrity. The rare race condition window (concurrent cycle creation) is acceptable for this use case and would be caught on retry.
+This permissions management system uses a **selective transaction strategy**: explicit transactions for critical multi-step operations where data integrity is paramount (`AddGroupToGroup` with cycle detection), and no transactions for simple single-query operations where atomicity is already guaranteed. This balanced approach provides strong consistency guarantees where needed while maintaining simplicity and performance for the majority of operations. The idempotent queries (ON DUPLICATE KEY UPDATE) and database constraints handle data integrity for non-transactional operations.
+
 

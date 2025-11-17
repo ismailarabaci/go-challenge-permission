@@ -328,11 +328,48 @@ func (r *MySQLRepository) GetUsersInGroupTransitive(ctx context.Context, groupID
 	return r.queryIDs(ctx, querySelectUsersInGroupTransitive, "failed to get users in group transitive", groupID)
 }
 
-// AddGroupToGroup adds a child group to a parent group
+// AddGroupToGroup adds a child group to a parent group with cycle detection
+// Uses a database transaction to ensure atomicity of cycle check and insert
 func (r *MySQLRepository) AddGroupToGroup(ctx context.Context, childID, parentID int) error {
-	_, err := r.db.ExecContext(ctx, queryInsertGroupToGroup, childID, parentID)
+	// Start transaction
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback() // Rollback if not committed
+
+	// Check for self-cycle
+	if childID == parentID {
+		return &CycleDetectedError{
+			ChildGroupID:  childID,
+			ParentGroupID: parentID,
+		}
+	}
+
+	// Check for cycle within transaction
+	var exists int
+	err = tx.QueryRowContext(ctx, queryCheckCycle, childID, parentID).Scan(&exists)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check for cycle: %w", err)
+	}
+
+	// If we found a row, it means adding this would create a cycle
+	if err == nil {
+		return &CycleDetectedError{
+			ChildGroupID:  childID,
+			ParentGroupID: parentID,
+		}
+	}
+
+	// No cycle detected, insert the relationship
+	_, err = tx.ExecContext(ctx, queryInsertGroupToGroup, childID, parentID)
 	if err != nil {
 		return fmt.Errorf("failed to add group to group: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil
