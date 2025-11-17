@@ -1,0 +1,111 @@
+name: PR Automation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ master, main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  label-pr:
+    name: Auto Label PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label PR based on changed files
+        uses: actions/labeler@v5
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+
+  check-pr-size:
+    name: Check PR Size
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PR size and add comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            
+            const totalChanges = files.reduce((sum, file) => sum + file.additions + file.deletions, 0);
+            const filesChanged = files.length;
+            
+            console.log(`Total changes: ${totalChanges}, Files changed: ${filesChanged}`);
+            
+            let message = '';
+            let shouldComment = false;
+            
+            if (totalChanges > 500) {
+              message = `⚠️ **Large PR Detected**\n\nThis PR has ${totalChanges} lines changed across ${filesChanged} files.\n\n**Recommendations:**\n- Consider breaking this into smaller, focused PRs\n- Smaller PRs are easier to review and less likely to introduce bugs\n- Target: < 500 lines changed per PR\n\n_This is an automated message to encourage trunk-based development best practices._`;
+              shouldComment = true;
+            } else if (totalChanges > 200) {
+              message = `ℹ️ **Medium-sized PR**\n\nThis PR has ${totalChanges} lines changed across ${filesChanged} files.\n\nConsider if this could be broken into smaller PRs for easier review.\n\n_This is an automated message to encourage trunk-based development best practices._`;
+              shouldComment = true;
+            }
+            
+            if (shouldComment) {
+              // Check if we already commented
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
+              
+              const botComment = comments.find(comment => 
+                comment.user.type === 'Bot' && comment.body.includes('PR Detected')
+              );
+              
+              if (!botComment) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: message
+                });
+              }
+            }
+
+  assign-reviewer:
+    name: Auto Assign Reviewer
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auto assign based on CODEOWNERS
+        uses: kentaro-m/auto-assign-action@v2.0.0
+        with:
+          configuration-path: .github/auto_assign.yml
+
+  pr-description-check:
+    name: Check PR Description
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR description
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+            
+            if (body.length < 20) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: '⚠️ **PR Description Missing**\n\nPlease add a meaningful description to your PR explaining:\n- What changes were made\n- Why these changes were necessary\n- How to test the changes\n\nA good description helps reviewers understand your changes better.'
+              });
+              
+              core.setFailed('PR description is too short or missing');
+            }
+

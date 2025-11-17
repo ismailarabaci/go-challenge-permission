@@ -1,0 +1,39 @@
+# Configuration for PR labeler (actions/labeler@v5)
+# Automatically adds labels to PRs based on changed files
+
+go:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+
+database:
+  - changed-files:
+    - any-glob-to-any-file: 'db/**/*'
+
+ci:
+  - changed-files:
+    - any-glob-to-any-file: '.github/workflows/**/*'
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file: '**/*.md'
+
+tests:
+  - changed-files:
+    - any-glob-to-any-file: '**/*_test.go'
+
+configuration:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '*.yml'
+      - '*.yaml'
+      - 'docker-compose.yml'
+
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'go.mod'
+      - 'go.sum'
+

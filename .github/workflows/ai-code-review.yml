@@ -1,0 +1,40 @@
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  pr-agent:
+    runs-on: ubuntu-latest
+    name: AI Code Review
+    if: github.event_name == 'pull_request' || (github.event_name == 'issue_comment' && github.event.issue.pull_request)
+    steps:
+      - name: PR Agent Review
+        uses: Codium-ai/pr-agent@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: Add OPENAI_KEY secret for enhanced AI reviews
+          # OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+        with:
+          # Configuration for Go project
+          config: |
+            [pr_reviewer]
+            require_focused_review = true
+            require_tests_review = true
+            require_security_review = true
+            num_code_suggestions = 4
+            
+            [pr_description]
+            publish_description_as_comment = true
+            
+            [pr_code_suggestions]
+            num_code_suggestions = 6
+

@@ -1,0 +1,35 @@
+# Auto assign reviewers configuration
+# This works in conjunction with CODEOWNERS
+
+# Set to true to add reviewers based on CODEOWNERS file
+addReviewers: true
+
+# Set to true to add assignees based on the author
+addAssignees: false
+
+# Number of reviewers to add
+numberOfReviewers: 1
+
+# List of reviewers (fallback if CODEOWNERS doesn't match)
+reviewers:
+  - ismailarabaci
+
+# Skip these keywords in PR title
+skipKeywords:
+  - wip
+  - WIP
+  - draft
+  - Draft
+
+# Assign based on changed files
+filePathRules:
+  - path: '**/*.go'
+    reviewers:
+      - ismailarabaci
+  - path: 'db/**'
+    reviewers:
+      - ismailarabaci
+  - path: '.github/**'
+    reviewers:
+      - ismailarabaci
+

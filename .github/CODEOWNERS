@@ -1,0 +1,28 @@
+# CODEOWNERS file for automatic reviewer assignment
+# Users/teams mentioned here will be automatically requested for review when someone opens a PR
+
+# Default owners for everything in the repository
+*       @ismailarabaci
+
+# Go source code
+*.go    @ismailarabaci
+pkg/**  @ismailarabaci
+
+# Database schemas and migrations
+db/**   @ismailarabaci
+
+# Configuration files
+*.yml   @ismailarabaci
+*.yaml  @ismailarabaci
+docker-compose.yml  @ismailarabaci
+
+# CI/CD workflows
+.github/workflows/**  @ismailarabaci
+
+# Documentation
+*.md    @ismailarabaci
+
+# Dependencies
+go.mod  @ismailarabaci
+go.sum  @ismailarabaci
+

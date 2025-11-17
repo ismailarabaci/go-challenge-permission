@@ -6,6 +6,10 @@
 
 A robust, production-ready permissions management system written in Go that handles user management, hierarchical group structures, and fine-grained access control.
 
+## 🔒 Trunk-Based Development
+
+This repository uses **trunk-based development** with protected master branch, AI code review, and comprehensive automation.
+
 ## Features
 
 ### Core Functionality
@@ -22,7 +26,7 @@ A robust, production-ready permissions management system written in Go that hand
 - **Concurrent-Safe**: Uses Go's goroutines with database connection pooling
 - **Zero External Dependencies**: Built with Go standard library only (except MySQL driver)
 - **Comprehensive Testing**: 24 unit tests + 2 integration tests with 95%+ coverage
-- **CI/CD Pipeline**: Automated testing, linting, and formatting checks
+- **CI Pipeline**: Automated testing, linting, and formatting checks
 
 ## Quick Start
 
@@ -136,7 +140,7 @@ See [`assumptions_and_design_choices.md`](./assumptions_and_design_choices.md) f
 │   └── integration_test.go # Integration tests (2 scenarios)
 ├── db/initdb/              # Database schema
 │   └── db.sql              # MySQL initialization script
-└── .github/workflows/      # CI/CD configuration
+└── .github/workflows/      # CI configuration
     └── ci.yml              # GitHub Actions workflow
 ```
 
@@ -191,6 +195,59 @@ The CI pipeline includes four jobs:
 - **Integration Tests**: Runs 2 end-to-end HTTP scenarios with race detector and coverage
 - **Lint**: Runs golangci-lint with comprehensive linter configuration
 - **Format**: Checks code formatting and runs go vet
+
+## Contributing
+
+### Workflow
+
+The master branch is **protected** - all changes require pull requests:
+
+```bash
+# 1. Create feature branch
+git checkout -b feature/my-feature
+
+# 2. Make changes and test
+go test ./pkg/server/... -v
+golangci-lint run --timeout=5m
+
+# 3. Push and create PR
+git push origin feature/my-feature
+gh pr create --fill
+
+# 4. Automated checks run:
+#    - CI (unit tests, integration tests, lint, format)
+#    - AI code review (Codium PR Agent)
+#    - Auto-labeling and size checking
+#    - Reviewer assignment from CODEOWNERS
+
+# 5. After approval + green CI
+gh pr merge --squash --delete-branch
+```
+
+### Branch Naming
+- `feature/` - New features
+- `fix/` - Bug fixes  
+- `refactor/` - Code refactoring
+- `docs/` - Documentation
+- `test/` - Test improvements
+
+### PR Requirements
+- ✅ 1 approval required
+- ✅ All CI checks pass
+- ✅ All conversations resolved
+- ✅ PR description (template provided)
+
+### Best Practices
+- Keep PRs small (< 500 lines recommended)
+- Keep branches short-lived (1-3 days)
+- Address AI and human review feedback
+- Run tests locally before pushing
+
+### Automation Features
+- **AI Code Review**: Codium PR Agent provides intelligent suggestions, security analysis, and Go best practices
+- **Auto-labeling**: PRs labeled by changed files (go, database, tests, etc.) and size (XS-XL)
+- **Dependabot**: Minor/patch dependency updates auto-merged after CI passes
+- **PR Template**: Structured template for descriptions and checklists
 
 ## Development
 
