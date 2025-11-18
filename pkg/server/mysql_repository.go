@@ -336,7 +336,7 @@ func (r *MySQLRepository) AddGroupToGroup(ctx context.Context, childID, parentID
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback() // Rollback if not committed
+	defer func() { _ = tx.Rollback() }() // Rollback if not committed
 
 	// Check for self-cycle
 	if childID == parentID {
